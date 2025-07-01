@@ -1,12 +1,141 @@
 // @ts-nocheck
+// @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
 interface Transaction {
   date: string;
   description: string;
   amount: string;
   category?: string;
 }
+
+// User interface
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  profilePicture?: string;
+  isPremium: boolean;
+  subscriptionEnd?: Date;
+}
+
+// Language types
+type Language = 'en' | 'es';
+
+// Translations
+const translations = {
+  en: {
+    // Header
+    signIn: 'Sign in with Google',
+    signOut: 'Sign Out',
+    upgrade: 'Upgrade to Premium',
+    language: 'Language',
+    
+    // Main content
+    title: 'Transform Your Bank Statements Into Actionable Data',
+    subtitle: 'Upload PDFs. Extract transactions. Categorize with AI. Get Smart Insights.',
+    uploadTitle: 'Upload Bank Statement (PDF)',
+    selectFile: 'Select PDF File',
+    uploadAnother: 'Upload Another PDF',
+    
+    // Premium features
+    premiumOnly: 'Premium Feature',
+    premiumMessage: 'Upgrade to Premium to unlock unlimited uploads and advanced insights!',
+    premiumButton: 'Upgrade Now - $9.99/month',
+    freeLimit: 'Free users: 3 uploads per month',
+    
+    // Analytics
+    totalSpent: 'Total Spent',
+    totalIncome: 'Total Income',
+    netAmount: 'Net Amount',
+    spendingByCategory: 'Spending by Category',
+    topMerchants: 'Top Merchants',
+    transactions: 'Transactions',
+    exportCsv: 'Export CSV',
+    quickbooks: 'QuickBooks',
+    
+    // Insights
+    smartInsights: 'Smart Insights',
+    setBudget: 'Set Budget',
+    viewDetails: 'View Details',
+    
+    // Categories
+    salary: 'Salary & Wages',
+    transferIn: 'Transfer In',
+    otherIncome: 'Other Income',
+    fastFood: 'Fast Food',
+    restaurants: 'Restaurants',
+    coffee: 'Coffee & Cafes',
+    foodDelivery: 'Food Delivery',
+    gas: 'Gas & Fuel',
+    autoPayment: 'Auto Payment',
+    rideshare: 'Rideshare',
+    movies: 'Movies & Theater',
+    subscriptions: 'Subscriptions',
+    onlineShopping: 'Online Shopping',
+    generalShopping: 'General Shopping',
+    clothing: 'Clothing & Fashion',
+    technology: 'Technology',
+    personalTransfers: 'Personal Transfers',
+    generalExpenses: 'General Expenses'
+  },
+  es: {
+    // Header
+    signIn: 'Iniciar sesión con Google',
+    signOut: 'Cerrar Sesión',
+    upgrade: 'Actualizar a Premium',
+    language: 'Idioma',
+    
+    // Main content
+    title: 'Transforma tus Estados de Cuenta en Datos Útiles',
+    subtitle: 'Sube PDFs. Extrae transacciones. Categoriza con IA. Obtén Insights Inteligentes.',
+    uploadTitle: 'Subir Estado de Cuenta (PDF)',
+    selectFile: 'Seleccionar Archivo PDF',
+    uploadAnother: 'Subir Otro PDF',
+    
+    // Premium features
+    premiumOnly: 'Función Premium',
+    premiumMessage: '¡Actualiza a Premium para desbloquear subidas ilimitadas e insights avanzados!',
+    premiumButton: 'Actualizar Ahora - $9.99/mes',
+    freeLimit: 'Usuarios gratuitos: 3 subidas por mes',
+    
+    // Analytics
+    totalSpent: 'Total Gastado',
+    totalIncome: 'Ingresos Totales',
+    netAmount: 'Cantidad Neta',
+    spendingByCategory: 'Gastos por Categoría',
+    topMerchants: 'Principales Comerciantes',
+    transactions: 'Transacciones',
+    exportCsv: 'Exportar CSV',
+    quickbooks: 'QuickBooks',
+    
+    // Insights
+    smartInsights: 'Insights Inteligentes',
+    setBudget: 'Establecer Presupuesto',
+    viewDetails: 'Ver Detalles',
+    
+    // Categories
+    salary: 'Salario y Sueldos',
+    transferIn: 'Transferencia Entrante',
+    otherIncome: 'Otros Ingresos',
+    fastFood: 'Comida Rápida',
+    restaurants: 'Restaurantes',
+    coffee: 'Café y Cafeterías',
+    foodDelivery: 'Entrega de Comida',
+    gas: 'Gasolina y Combustible',
+    autoPayment: 'Pago de Auto',
+    rideshare: 'Viajes Compartidos',
+    movies: 'Películas y Teatro',
+    subscriptions: 'Suscripciones',
+    onlineShopping: 'Compras en Línea',
+    generalShopping: 'Compras Generales',
+    clothing: 'Ropa y Moda',
+    technology: 'Tecnología',
+    personalTransfers: 'Transferencias Personales',
+    generalExpenses: 'Gastos Generales'
+  }
+};
 
 // Smart Insights Engine Types
 interface SpendingInsight {
@@ -29,6 +158,189 @@ interface SpendingInsight {
 interface MonthlySpending {
   [category: string]: number;
 }
+
+// Google Sign-In Component
+const GoogleSignIn: React.FC<{ onSignIn: (user: User) => void; language: Language }> = ({ onSignIn, language }) => {
+  const t = translations[language];
+  
+  const handleGoogleSignIn = () => {
+    // Simulate Google Sign-In (in real app, use Google OAuth)
+    const mockUser: User = {
+      id: '123',
+      email: 'user@example.com',
+      name: 'John Doe',
+      profilePicture: 'https://via.placeholder.com/40',
+      isPremium: false
+    };
+    onSignIn(mockUser);
+  };
+
+  return (
+    <button
+      onClick={handleGoogleSignIn}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.5rem',
+        padding: '0.5rem 1rem',
+        backgroundColor: 'white',
+        border: '1px solid #d1d5db',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        fontSize: '0.875rem',
+        fontWeight: '500',
+        color: '#374151'
+      }}
+    >
+      <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google" style={{ width: '18px', height: '18px' }} />
+      {t.signIn}
+    </button>
+  );
+};
+
+// User Profile Component
+const UserProfile: React.FC<{ user: User; onSignOut: () => void; onUpgrade: () => void; language: Language }> = ({ user, onSignOut, onUpgrade, language }) => {
+  const t = translations[language];
+  
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+      {!user.isPremium && (
+        <button
+          onClick={onUpgrade}
+          style={{
+            padding: '0.5rem 1rem',
+            backgroundColor: '#f59e0b',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            fontSize: '0.875rem',
+            fontWeight: '500',
+            cursor: 'pointer'
+          }}
+        >
+          {t.upgrade}
+        </button>
+      )}
+      
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <img
+          src={user.profilePicture || 'https://via.placeholder.com/32'}
+          alt={user.name}
+          style={{ width: '32px', height: '32px', borderRadius: '50%' }}
+        />
+        <span style={{ fontSize: '0.875rem', fontWeight: '500' }}>{user.name}</span>
+        <button
+          onClick={onSignOut}
+          style={{
+            padding: '0.25rem 0.5rem',
+            backgroundColor: '#ef4444',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            fontSize: '0.75rem',
+            cursor: 'pointer'
+          }}
+        >
+          {t.signOut}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Premium Paywall Component
+const PremiumPaywall: React.FC<{ onUpgrade: () => void; language: Language }> = ({ onUpgrade, language }) => {
+  const t = translations[language];
+  
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        padding: '3rem',
+        borderRadius: '12px',
+        maxWidth: '500px',
+        textAlign: 'center',
+        margin: '2rem'
+      }}>
+        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🚀</div>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: '600', color: '#111827', marginBottom: '1rem' }}>
+          {t.premiumOnly}
+        </h2>
+        <p style={{ color: '#6b7280', marginBottom: '2rem' }}>
+          {t.premiumMessage}
+        </p>
+        
+        <div style={{ backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '8px', marginBottom: '2rem' }}>
+          <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem' }}>Premium Features:</h3>
+          <ul style={{ textAlign: 'left', color: '#374151' }}>
+            <li>✅ Unlimited PDF uploads</li>
+            <li>✅ Advanced spending insights</li>
+            <li>✅ Custom budget alerts</li>
+            <li>✅ Export to multiple formats</li>
+            <li>✅ Multi-language support</li>
+            <li>✅ Priority customer support</li>
+          </ul>
+        </div>
+        
+        <button
+          onClick={onUpgrade}
+          style={{
+            padding: '1rem 2rem',
+            backgroundColor: '#3b82f6',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '1rem',
+            fontWeight: '600',
+            cursor: 'pointer',
+            marginBottom: '1rem',
+            width: '100%'
+          }}
+        >
+          {t.premiumButton}
+        </button>
+        
+        <p style={{ fontSize: '0.875rem', color: '#9ca3af' }}>
+          Cancel anytime • 30-day money-back guarantee
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// Language Toggle Component
+const LanguageToggle: React.FC<{ language: Language; onLanguageChange: (lang: Language) => void }> = ({ language, onLanguageChange }) => {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>🌐</span>
+      <select
+        value={language}
+        onChange={(e) => onLanguageChange(e.target.value as Language)}
+        style={{
+          padding: '0.25rem 0.5rem',
+          border: '1px solid #d1d5db',
+          borderRadius: '4px',
+          fontSize: '0.875rem',
+          backgroundColor: 'white'
+        }}
+      >
+        <option value="en">English</option>
+        <option value="es">Español</option>
+      </select>
+    </div>
+  );
+};
 
 // Toast notification component
 const Toast: React.FC<{ message: string; type: 'success' | 'error' | 'info'; onClose: () => void }> = ({ message, type, onClose }) => {
@@ -271,8 +583,9 @@ class SmartInsightsEngine {
 }
 
 // Smart Insights Panel Component
-const InsightsPanel: React.FC<{ transactions: Transaction[] }> = ({ transactions }) => {
+const InsightsPanel: React.FC<{ transactions: Transaction[]; language: Language }> = ({ transactions, language }) => {
   const [insights, setInsights] = useState<SpendingInsight[]>([]);
+  const t = translations[language];
   
   useEffect(() => {
     if (transactions.length > 0) {
@@ -313,7 +626,7 @@ const InsightsPanel: React.FC<{ transactions: Transaction[] }> = ({ transactions
       }}>
         <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>🧠</div>
         <h3 style={{ fontSize: '1.125rem', fontWeight: '600', color: '#111827', marginBottom: '0.5rem' }}>
-          Smart Insights Engine
+          {t.smartInsights}
         </h3>
         <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
           Upload more transactions to see personalized spending insights and recommendations!
@@ -332,7 +645,7 @@ const InsightsPanel: React.FC<{ transactions: Transaction[] }> = ({ transactions
       boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
     }}>
       <h2 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#111827', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        🧠 Smart Insights
+        🧠 {t.smartInsights}
         <span style={{
           backgroundColor: '#3b82f6',
           color: 'white',
@@ -392,7 +705,7 @@ const InsightsPanel: React.FC<{ transactions: Transaction[] }> = ({ transactions
                         cursor: 'pointer',
                         fontWeight: '500'
                       }}>
-                        Set Budget
+                        {t.setBudget}
                       </button>
                       <button style={{
                         fontSize: '0.75rem',
@@ -404,7 +717,7 @@ const InsightsPanel: React.FC<{ transactions: Transaction[] }> = ({ transactions
                         cursor: 'pointer',
                         fontWeight: '500'
                       }}>
-                        View Details
+                        {t.viewDetails}
                       </button>
                     </div>
                   )}
@@ -419,13 +732,55 @@ const InsightsPanel: React.FC<{ transactions: Transaction[] }> = ({ transactions
 };
 
 export default function App() {
+  // State management
+  const [user, setUser] = useState<User | null>(null);
+  const [language, setLanguage] = useState<Language>('en');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [fileName, setFileName] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [uploadCount, setUploadCount] = useState(0);
+
+  const t = translations[language];
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ message, type });
+  };
+
+  // Handle user sign in/out
+  const handleSignIn = (signedInUser: User) => {
+    setUser(signedInUser);
+    showToast(`Welcome, ${signedInUser.name}!`, 'success');
+  };
+
+  const handleSignOut = () => {
+    setUser(null);
+    setTransactions([]);
+    setUploadCount(0);
+    showToast('Signed out successfully', 'info');
+  };
+
+  // Handle premium upgrade
+  const handleUpgrade = () => {
+    if (user) {
+      // Simulate payment processing
+      const upgradedUser: User = {
+        ...user,
+        isPremium: true,
+        subscriptionEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days from now
+      };
+      setUser(upgradedUser);
+      setShowPaywall(false);
+      showToast('Welcome to Premium! 🎉', 'success');
+    }
+  };
+
+  // Check if user can upload (premium or under free limit)
+  const canUpload = () => {
+    if (!user) return false;
+    if (user.isPremium) return true;
+    return uploadCount < 3;
   };
 
   // Advanced AI-Powered Smart Categorization Engine
@@ -436,74 +791,86 @@ export default function App() {
     
     if (!isExpense) {
       if (desc.includes('payroll') || desc.includes('salary') || desc.includes('trilyon') || desc.includes('employer')) {
-        return 'Salary & Wages';
+        return language === 'es' ? t.salary : 'Salary & Wages';
       }
       if (desc.includes('cash app') || desc.includes('venmo') || desc.includes('transfer') || desc.includes('deposit')) {
-        return 'Transfer In';
+        return language === 'es' ? t.transferIn : 'Transfer In';
       }
-      return 'Other Income';
+      return language === 'es' ? t.otherIncome : 'Other Income';
     }
     
     // Food & Dining
     if (desc.includes('mcdonald') || desc.includes('burger king') || desc.includes('taco bell')) {
-      return 'Fast Food';
+      return language === 'es' ? t.fastFood : 'Fast Food';
     }
     if (desc.includes('restaurant') || desc.includes('bistro') || desc.includes('grill')) {
-      return 'Restaurants';
+      return language === 'es' ? t.restaurants : 'Restaurants';
     }
     if (desc.includes('starbucks') || desc.includes('coffee') || desc.includes('cafe')) {
-      return 'Coffee & Cafes';
+      return language === 'es' ? t.coffee : 'Coffee & Cafes';
     }
     if (desc.includes('doordash') || desc.includes('uber eats') || desc.includes('grubhub')) {
-      return 'Food Delivery';
+      return language === 'es' ? t.foodDelivery : 'Food Delivery';
     }
     
     // Transportation
     if (desc.includes('shell') || desc.includes('exxon') || desc.includes('gas') || desc.includes('fuel')) {
-      return 'Gas & Fuel';
+      return language === 'es' ? t.gas : 'Gas & Fuel';
     }
     if (desc.includes('audi') || desc.includes('auto') || desc.includes('car payment')) {
-      return 'Auto Payment';
+      return language === 'es' ? t.autoPayment : 'Auto Payment';
     }
     if (desc.includes('uber') || desc.includes('lyft') || desc.includes('taxi')) {
-      return 'Rideshare';
+      return language === 'es' ? t.rideshare : 'Rideshare';
     }
     
     // Entertainment
     if (desc.includes('amc') || desc.includes('cinema') || desc.includes('movie')) {
-      return 'Movies & Theater';
+      return language === 'es' ? t.movies : 'Movies & Theater';
     }
     if (desc.includes('netflix') || desc.includes('spotify') || desc.includes('subscription')) {
-      return 'Subscriptions';
+      return language === 'es' ? t.subscriptions : 'Subscriptions';
     }
     
     // Shopping
     if (desc.includes('amazon') && amountValue < 25) {
-      return 'Online Shopping';
+      return language === 'es' ? t.onlineShopping : 'Online Shopping';
     }
     if (desc.includes('target') || desc.includes('walmart')) {
-      return 'General Shopping';
+      return language === 'es' ? t.generalShopping : 'General Shopping';
     }
     if (desc.includes('foot locker') || desc.includes('clothing')) {
-      return 'Clothing & Fashion';
+      return language === 'es' ? t.clothing : 'Clothing & Fashion';
     }
     
     // Technology
     if (desc.includes('apple') || desc.includes('app store')) {
-      return 'Technology';
+      return language === 'es' ? t.technology : 'Technology';
     }
     
     // Personal Transfers
     if (desc.includes('cash app') || desc.includes('venmo') || desc.includes('payment sent')) {
-      return 'Personal Transfers';
+      return language === 'es' ? t.personalTransfers : 'Personal Transfers';
     }
     
-    return 'General Expenses';
+    return language === 'es' ? t.generalExpenses : 'General Expenses';
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Check if user is signed in
+    if (!user) {
+      showToast('Please sign in first', 'error');
+      return;
+    }
+
+    // Check upload limits
+    if (!canUpload()) {
+      setShowPaywall(true);
+      return;
+    }
 
     console.log('🔄 File selected:', file.name, 'Size:', file.size, 'Type:', file.type);
     
@@ -704,6 +1071,7 @@ export default function App() {
           console.log(`✅ Valid transactions: ${validTransactions.length}`);
 
           setTransactions(validTransactions);
+          setUploadCount(prev => prev + 1);
           showToast(`🎉 Successfully extracted ${validTransactions.length} transactions!`, 'success');
           
         } catch (error) {
@@ -811,6 +1179,14 @@ export default function App() {
         />
       )}
 
+      {/* Premium Paywall */}
+      {showPaywall && (
+        <PremiumPaywall 
+          onUpgrade={handleUpgrade} 
+          language={language} 
+        />
+      )}
+
       {/* Header */}
       <header style={{
         backgroundColor: 'white',
@@ -840,6 +1216,21 @@ export default function App() {
             Balynce
           </span>
         </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <LanguageToggle language={language} onLanguageChange={setLanguage} />
+          
+          {user ? (
+            <UserProfile 
+              user={user} 
+              onSignOut={handleSignOut} 
+              onUpgrade={() => setShowPaywall(true)} 
+              language={language}
+            />
+          ) : (
+            <GoogleSignIn onSignIn={handleSignIn} language={language} />
+          )}
+        </div>
       </header>
 
       <main style={{ 
@@ -856,16 +1247,31 @@ export default function App() {
             color: '#111827',
             marginBottom: '1rem'
           }}>
-            Transform Your Bank Statements Into Actionable Data
+            {t.title}
           </h1>
           <p style={{
             fontSize: '1.25rem',
             color: '#6b7280',
             marginBottom: '2rem'
           }}>
-            Upload PDFs. Extract transactions. Categorize with AI. Get Smart Insights.
+            {t.subtitle}
           </p>
         </div>
+
+        {/* Upload limit indicator for free users */}
+        {user && !user.isPremium && (
+          <div style={{
+            backgroundColor: '#fffbeb',
+            border: '1px solid #f59e0b',
+            borderRadius: '8px',
+            padding: '1rem',
+            marginBottom: '2rem',
+            textAlign: 'center',
+            color: '#92400e'
+          }}>
+            {t.freeLimit} - {uploadCount}/3 used
+          </div>
+        )}
 
         {/* File Upload Section */}
         <div style={{
@@ -899,7 +1305,7 @@ export default function App() {
             color: '#111827',
             marginBottom: '0.5rem'
           }}>
-            {fileName || 'Upload Bank Statement (PDF)'}
+            {fileName || t.uploadTitle}
           </h3>
 
           <input
@@ -908,7 +1314,7 @@ export default function App() {
             onChange={handleFileUpload}
             style={{ display: 'none' }}
             id="file-upload"
-            disabled={loading}
+            disabled={loading || !user}
           />
 
           <label
@@ -916,24 +1322,30 @@ export default function App() {
             style={{
               display: 'inline-block',
               padding: '0.75rem 1.5rem',
-              backgroundColor: loading ? '#9ca3af' : '#3b82f6',
+              backgroundColor: loading || !user ? '#9ca3af' : '#3b82f6',
               color: 'white',
               borderRadius: '8px',
-              cursor: loading ? 'not-allowed' : 'pointer',
+              cursor: loading || !user ? 'not-allowed' : 'pointer',
               fontSize: '0.875rem',
               fontWeight: '500',
               marginBottom: '1rem'
             }}
           >
-            {fileName ? 'Upload Another PDF' : 'Select PDF File'}
+            {!user ? t.signIn : (fileName ? t.uploadAnother : t.selectFile)}
           </label>
+
+          {!user && (
+            <p style={{ color: '#6b7280', fontSize: '0.875rem', marginTop: '1rem' }}>
+              Please sign in to upload bank statements
+            </p>
+          )}
         </div>
 
         {/* Smart Insights Section */}
-        {transactions.length > 0 && <InsightsPanel transactions={transactions} />}
+        {transactions.length > 0 && user && <InsightsPanel transactions={transactions} language={language} />}
 
         {/* Analytics Dashboard */}
-        {transactions.length > 0 && (
+        {transactions.length > 0 && user && (
           <div>
             {/* Summary Cards */}
             <div style={{
@@ -960,7 +1372,7 @@ export default function App() {
                     color: '#6b7280',
                     marginBottom: '0.25rem'
                   }}>
-                    Total Spent
+                    {t.totalSpent}
                   </div>
                   <div style={{ fontSize: '1.75rem', fontWeight: 'bold', color: '#dc2626' }}>
                     ${totalSpent.toFixed(2)}
@@ -998,7 +1410,7 @@ export default function App() {
                     color: '#6b7280',
                     marginBottom: '0.25rem'
                   }}>
-                    Total Income
+                    {t.totalIncome}
                   </div>
                   <div style={{ fontSize: '1.75rem', fontWeight: 'bold', color: '#059669' }}>
                     ${totalIncome.toFixed(2)}
@@ -1036,7 +1448,7 @@ export default function App() {
                     color: '#6b7280',
                     marginBottom: '0.25rem'
                   }}>
-                    Net Amount
+                    {t.netAmount}
                   </div>
                   <div style={{
                     fontSize: '1.75rem',
@@ -1079,7 +1491,7 @@ export default function App() {
                   boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
                 }}>
                   <h3 style={{ fontSize: '1.125rem', fontWeight: '600', color: '#111827', marginBottom: '1.5rem' }}>
-                    💰 Spending by Category
+                    💰 {t.spendingByCategory}
                   </h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
@@ -1113,7 +1525,7 @@ export default function App() {
                   boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
                 }}>
                   <h3 style={{ fontSize: '1.125rem', fontWeight: '600', color: '#111827', marginBottom: '1.5rem' }}>
-                    🏪 Top Merchants
+                    🏪 {t.topMerchants}
                   </h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={topMerchants} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
@@ -1156,7 +1568,7 @@ export default function App() {
                 alignItems: 'center'
               }}>
                 <h3 style={{ fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>
-                  📋 Transactions ({transactions.length})
+                  📋 {t.transactions} ({transactions.length})
                 </h3>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button
@@ -1186,7 +1598,7 @@ export default function App() {
                       cursor: 'pointer'
                     }}
                   >
-                    📄 Export CSV
+                    📄 {t.exportCsv}
                   </button>
                   
                   <button
@@ -1220,7 +1632,7 @@ export default function App() {
                       cursor: 'pointer'
                     }}
                   >
-                    💼 QuickBooks
+                    💼 {t.quickbooks}
                   </button>
                 </div>
               </div>
@@ -1238,7 +1650,7 @@ export default function App() {
                         textTransform: 'uppercase',
                         letterSpacing: '0.05em'
                       }}>
-                        Date
+                        {language === 'es' ? 'Fecha' : 'Date'}
                       </th>
                       <th style={{
                         padding: '0.75rem',
@@ -1249,7 +1661,7 @@ export default function App() {
                         textTransform: 'uppercase',
                         letterSpacing: '0.05em'
                       }}>
-                        Description
+                        {language === 'es' ? 'Descripción' : 'Description'}
                       </th>
                       <th style={{
                         padding: '0.75rem',
@@ -1260,7 +1672,7 @@ export default function App() {
                         textTransform: 'uppercase',
                         letterSpacing: '0.05em'
                       }}>
-                        Amount
+                        {language === 'es' ? 'Cantidad' : 'Amount'}
                       </th>
                       <th style={{
                         padding: '0.75rem',
@@ -1271,7 +1683,7 @@ export default function App() {
                         textTransform: 'uppercase',
                         letterSpacing: '0.05em'
                       }}>
-                        Category
+                        {language === 'es' ? 'Categoría' : 'Category'}
                       </th>
                     </tr>
                   </thead>
@@ -1321,6 +1733,70 @@ export default function App() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Welcome message for non-signed-in users */}
+        {!user && (
+          <div style={{
+            backgroundColor: 'white',
+            padding: '3rem',
+            borderRadius: '12px',
+            border: '1px solid #e5e7eb',
+            textAlign: 'center',
+            boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🏦</div>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '600', color: '#111827', marginBottom: '1rem' }}>
+              {language === 'es' ? 'Bienvenido a Balynce' : 'Welcome to Balynce'}
+            </h2>
+            <p style={{ color: '#6b7280', marginBottom: '2rem', maxWidth: '600px', margin: '0 auto 2rem' }}>
+              {language === 'es' 
+                ? 'Analiza tus estados de cuenta bancarios con IA. Obtén insights inteligentes sobre tus gastos y toma mejores decisiones financieras.'
+                : 'Analyze your bank statements with AI. Get smart insights about your spending and make better financial decisions.'
+              }
+            </p>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '2rem', marginTop: '2rem' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🤖</div>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                  {language === 'es' ? 'IA Avanzada' : 'Advanced AI'}
+                </h3>
+                <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+                  {language === 'es' 
+                    ? 'Categorización automática y detección de patrones de gasto'
+                    : 'Automatic categorization and spending pattern detection'
+                  }
+                </p>
+              </div>
+              
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📊</div>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                  {language === 'es' ? 'Insights Inteligentes' : 'Smart Insights'}
+                </h3>
+                <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+                  {language === 'es' 
+                    ? 'Recomendaciones personalizadas y alertas de gastos'
+                    : 'Personalized recommendations and spending alerts'
+                  }
+                </p>
+              </div>
+              
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔒</div>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                  {language === 'es' ? 'Seguro' : 'Secure'}
+                </h3>
+                <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+                  {language === 'es' 
+                    ? 'Tus datos se procesan localmente y nunca se almacenan'
+                    : 'Your data is processed locally and never stored'
+                  }
+                </p>
               </div>
             </div>
           </div>
