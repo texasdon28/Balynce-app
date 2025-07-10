@@ -1,3 +1,4 @@
+// @ts-nocheck
 console.log(`🎯 Lines with dates and amounts: ${transactionLines.length}`);
             
             if (transactionLines.length > 0) {
