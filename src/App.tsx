@@ -262,14 +262,26 @@ const UserProfile: React.FC<{ user: User; onSignOut: () => void; onUpgrade: () =
         <button
           onClick={onUpgrade}
           style={{
-            padding: '0.5rem 1rem',
-            backgroundColor: '#3b82f6',
+            padding: '0.75rem 1.5rem',
+            background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
             color: 'white',
             border: 'none',
-            borderRadius: '8px',
+            borderRadius: '12px',
             fontSize: '0.875rem',
             fontWeight: '600',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)',
+            textTransform: 'none',
+            letterSpacing: '0.025em'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.transform = 'translateY(-1px)';
+            e.currentTarget.style.boxShadow = '0 6px 12px -2px rgba(59, 130, 246, 0.4)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.transform = 'translateY(0px)';
+            e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(59, 130, 246, 0.3)';
           }}
         >
           {t.upgrade}
@@ -525,23 +537,47 @@ const PricingModal: React.FC<{
 
 const LanguageToggle: React.FC<{ language: Language; onLanguageChange: (lang: Language) => void }> = ({ language, onLanguageChange }) => {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-      <span style={{ fontSize: '0.875rem' }}>🌐</span>
+    <div style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: '0.75rem',
+      background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+      padding: '0.75rem 1rem',
+      borderRadius: '12px',
+      border: '2px solid #e2e8f0',
+      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+      transition: 'all 0.2s ease'
+    }}>
+      <span style={{ 
+        fontSize: '1.25rem',
+        filter: 'grayscale(0)',
+        opacity: 0.8
+      }}>🌐</span>
       <select
         value={language}
         onChange={(e) => onLanguageChange(e.target.value as Language)}
         style={{
-          padding: '0.5rem',
-          border: '2px solid #e5e7eb',
+          padding: '0.5rem 0.75rem',
+          border: 'none',
           borderRadius: '8px',
           fontSize: '0.875rem',
           backgroundColor: 'white',
-          fontWeight: '500',
-          cursor: 'pointer'
+          fontWeight: '600',
+          cursor: 'pointer',
+          color: '#1e293b',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+          outline: 'none',
+          minWidth: '100px',
+          appearance: 'none',
+          backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
+          backgroundPosition: 'right 0.5rem center',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: '1.5em 1.5em',
+          paddingRight: '2.5rem'
         }}
       >
-        <option value="en">English</option>
-        <option value="es">Español</option>
+        <option value="en" style={{ padding: '0.5rem' }}>English</option>
+        <option value="es" style={{ padding: '0.5rem' }}>Español</option>
       </select>
     </div>
   );
@@ -835,7 +871,11 @@ export default function App() {
     <div style={{ 
       minHeight: '100vh', 
       backgroundColor: '#f8fafc', 
-      fontFamily: 'system-ui, -apple-system, sans-serif'
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      width: '100%',
+      margin: 0,
+      padding: 0,
+      boxSizing: 'border-box'
     }}>
       {toast && (
         <Toast 
@@ -857,12 +897,14 @@ export default function App() {
       <header style={{
         backgroundColor: 'white',
         borderBottom: '1px solid #e5e7eb',
-        padding: '1.5rem 3rem',
+        padding: '1.5rem 2rem',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         height: '90px',
-        boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
+        boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
+        width: '100%',
+        margin: 0
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{
@@ -903,10 +945,11 @@ export default function App() {
 
       <main style={{ 
         margin: '0 auto', 
-        padding: '3rem 4rem', 
+        padding: '3rem 2rem', 
         width: '100%', 
         maxWidth: '1400px',
-        minHeight: 'calc(100vh - 90px)'
+        minHeight: 'calc(100vh - 90px)',
+        boxSizing: 'border-box'
       }}>
         <div style={{ textAlign: 'center', paddingTop: '2rem', marginBottom: '3rem' }}>
           <h1 style={{
@@ -973,14 +1016,26 @@ export default function App() {
               <button
                 onClick={() => setShowPricingModal(true)}
                 style={{
-                  padding: '1rem 2rem',
+                  padding: '1.25rem 2.5rem',
                   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '12px',
-                  fontSize: '1rem',
-                  fontWeight: '600',
-                  cursor: 'pointer'
+                  borderRadius: '16px',
+                  fontSize: '1.125rem',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: '0 8px 16px -4px rgba(102, 126, 234, 0.4)',
+                  textTransform: 'none',
+                  letterSpacing: '0.025em'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+                  e.currentTarget.style.boxShadow = '0 12px 24px -6px rgba(102, 126, 234, 0.5)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0px) scale(1)';
+                  e.currentTarget.style.boxShadow = '0 8px 16px -4px rgba(102, 126, 234, 0.4)';
                 }}
               >
                 {t.upgrade}
@@ -1052,15 +1107,43 @@ export default function App() {
             htmlFor="file-upload"
             style={{
               display: 'inline-block',
-              padding: '1.25rem 2.5rem',
-              backgroundColor: !user || !canUpload() ? '#9ca3af' : loading ? '#f59e0b' : '#3b82f6',
+              padding: '1.5rem 3rem',
+              background: !user || !canUpload() 
+                ? 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)' 
+                : loading 
+                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
+                  : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
               color: 'white',
-              borderRadius: '16px',
+              borderRadius: '20px',
               cursor: !user || !canUpload() || loading ? 'not-allowed' : 'pointer',
-              fontSize: '1.125rem',
-              fontWeight: '600',
+              fontSize: '1.25rem',
+              fontWeight: '700',
               marginBottom: '1.5rem',
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+              boxShadow: !user || !canUpload() 
+                ? '0 4px 6px -1px rgba(156, 163, 175, 0.3)' 
+                : loading 
+                  ? '0 8px 16px -4px rgba(245, 158, 11, 0.4)' 
+                  : '0 8px 16px -4px rgba(59, 130, 246, 0.4)',
+              transition: 'all 0.3s ease',
+              border: 'none',
+              textTransform: 'none',
+              letterSpacing: '0.025em',
+              position: 'relative',
+              overflow: 'hidden'
+            }}
+            onMouseOver={(e) => {
+              if (user && canUpload() && !loading) {
+                e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
+                e.currentTarget.style.boxShadow = '0 12px 24px -6px rgba(59, 130, 246, 0.5)';
+              }
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = 'translateY(0px) scale(1)';
+              e.currentTarget.style.boxShadow = !user || !canUpload() 
+                ? '0 4px 6px -1px rgba(156, 163, 175, 0.3)' 
+                : loading 
+                  ? '0 8px 16px -4px rgba(245, 158, 11, 0.4)' 
+                  : '0 8px 16px -4px rgba(59, 130, 246, 0.4)';
             }}
           >
             {!user ? t.signIn : !canUpload() ? t.upgrade : (fileName ? t.uploadAnother : t.selectFile)}
@@ -1230,14 +1313,26 @@ export default function App() {
                       showToast('CSV exported!', 'success');
                     }}
                     style={{
-                      padding: '0.75rem 1.5rem',
-                      backgroundColor: '#10b981',
+                      padding: '0.875rem 1.75rem',
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                       color: 'white',
                       border: 'none',
                       borderRadius: '12px',
                       fontSize: '0.875rem',
                       fontWeight: '600',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)',
+                      textTransform: 'none',
+                      letterSpacing: '0.025em'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 6px 12px -2px rgba(16, 185, 129, 0.4)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0px)';
+                      e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(16, 185, 129, 0.3)';
                     }}
                   >
                     📄 {t.exportCsv}
@@ -1446,17 +1541,29 @@ export default function App() {
               <button
                 onClick={() => setShowPricingModal(true)}
                 style={{
-                  padding: '1.5rem 3rem',
+                  padding: '1.75rem 3.5rem',
                   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '16px',
-                  fontSize: '1.25rem',
-                  fontWeight: 'bold',
+                  borderRadius: '20px',
+                  fontSize: '1.375rem',
+                  fontWeight: '700',
                   cursor: 'pointer',
-                  transition: 'all 0.3s',
-                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-                  marginBottom: '1rem'
+                  transition: 'all 0.3s ease',
+                  boxShadow: '0 12px 24px -6px rgba(102, 126, 234, 0.4)',
+                  marginBottom: '1rem',
+                  textTransform: 'none',
+                  letterSpacing: '0.025em',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)';
+                  e.currentTarget.style.boxShadow = '0 16px 32px -8px rgba(102, 126, 234, 0.5)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0px) scale(1)';
+                  e.currentTarget.style.boxShadow = '0 12px 24px -6px rgba(102, 126, 234, 0.4)';
                 }}
               >
                 {language === 'es' ? 'Ver Planes y Precios' : 'View Plans & Pricing'}
