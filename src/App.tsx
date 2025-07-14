@@ -1,4 +1,5 @@
-subscriptionEnd: plan.type === 'monthly' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : undefined
+parsesRemaining: plan.parses === 'unlimited' ? 999999 : plan.parses as number,
+          subscriptionEnd: plan.type === 'monthly' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : undefined
         };
         setUser(updatedUser);
         setShowPricingModal(false);
@@ -190,7 +191,7 @@ subscriptionEnd: plan.type === 'monthly' ? new Date(Date.now() + 30 * 24 * 60 * 
 
   const netAmount = totalIncome - totalSpent;
 
-  // Add CSS for full width and mobile optimization
+  // Add global styles for full width
   useEffect(() => {
     const style = document.createElement('style');
     style.textContent = `
@@ -210,17 +211,13 @@ subscriptionEnd: plan.type === 'monthly' ? new Date(Date.now() + 30 * 24 * 60 * 
         width: 100%;
         min-height: 100vh;
       }
-      
-      @media (max-width: 768px) {
-        body {
-          font-size: 14px;
-        }
-      }
     `;
     document.head.appendChild(style);
     
     return () => {
-      document.head.removeChild(style);
+      if (document.head.contains(style)) {
+        document.head.removeChild(style);
+      }
     };
   }, []);
 
@@ -407,14 +404,6 @@ subscriptionEnd: plan.type === 'monthly' ? new Date(Date.now() + 30 * 24 * 60 * 
                   letterSpacing: '0.025em',
                   width: isMobile ? '100%' : 'auto'
                 }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
-                  e.currentTarget.style.boxShadow = '0 12px 24px -6px rgba(102, 126, 234, 0.5)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0px) scale(1)';
-                  e.currentTarget.style.boxShadow = '0 8px 16px -4px rgba(102, 126, 234, 0.4)';
-                }}
               >
                 {t.upgrade}
               </button>
@@ -510,20 +499,6 @@ subscriptionEnd: plan.type === 'monthly' ? new Date(Date.now() + 30 * 24 * 60 * 
               position: 'relative',
               overflow: 'hidden',
               width: isMobile ? '100%' : 'auto'
-            }}
-            onMouseOver={(e) => {
-              if (user && canUpload() && !loading) {
-                e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
-                e.currentTarget.style.boxShadow = '0 12px 24px -6px rgba(59, 130, 246, 0.5)';
-              }
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.transform = 'translateY(0px) scale(1)';
-              e.currentTarget.style.boxShadow = !user || !canUpload() 
-                ? '0 4px 6px -1px rgba(156, 163, 175, 0.3)' 
-                : loading 
-                  ? '0 8px 16px -4px rgba(245, 158, 11, 0.4)' 
-                  : '0 8px 16px -4px rgba(59, 130, 246, 0.4)';
             }}
           >
             {!user ? t.signIn : !canUpload() ? t.upgrade : (fileName ? t.uploadAnother : t.selectFile)}
@@ -705,7 +680,325 @@ subscriptionEnd: plan.type === 'monthly' ? new Date(Date.now() + 30 * 24 * 60 * 
                       
                       const blob = new Blob([csv], { type: 'text/csv' });
                       const url = URL.createObjectURL(blob);
-                      const a = document.createElement('// @ts-nocheck
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `${fileName?.replace('.pdf', '') || 'transactions'}.csv`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      showToast('CSV exported!', 'success');
+                    }}
+                    style={{
+                      padding: isMobile ? '0.75rem 1.25rem' : '0.875rem 1.75rem',
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '12px',
+                      fontSize: isMobile ? '0.8125rem' : '0.875rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)',
+                      textTransform: 'none',
+                      letterSpacing: '0.025em',
+                      flex: isMobile ? '1' : 'none'
+                    }}
+                  >
+                    📄 {isMobile ? 'CSV' : t.exportCsv}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ 
+                maxHeight: isMobile ? '400px' : '500px', 
+                overflowY: 'auto',
+                overflowX: isMobile ? 'auto' : 'visible'
+              }}>
+                <table style={{
+                  width: '100%', 
+                  borderCollapse: 'collapse',
+                  minWidth: isMobile ? '600px' : 'auto'
+                }}>
+                  <thead style={{ backgroundColor: '#f9fafb', position: 'sticky', top: 0 }}>
+                    <tr>
+                      <th style={{
+                        padding: isMobile ? '0.75rem 0.5rem' : '1rem',
+                        textAlign: 'left',
+                        fontSize: isMobile ? '0.75rem' : '0.875rem',
+                        fontWeight: '600',
+                        color: '#6b7280',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        minWidth: isMobile ? '80px' : 'auto'
+                      }}>
+                        {language === 'es' ? 'Fecha' : 'Date'}
+                      </th>
+                      <th style={{
+                        padding: isMobile ? '0.75rem 0.5rem' : '1rem',
+                        textAlign: 'left',
+                        fontSize: isMobile ? '0.75rem' : '0.875rem',
+                        fontWeight: '600',
+                        color: '#6b7280',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        minWidth: isMobile ? '200px' : 'auto'
+                      }}>
+                        {language === 'es' ? 'Descripción' : 'Description'}
+                      </th>
+                      <th style={{
+                        padding: isMobile ? '0.75rem 0.5rem' : '1rem',
+                        textAlign: 'right',
+                        fontSize: isMobile ? '0.75rem' : '0.875rem',
+                        fontWeight: '600',
+                        color: '#6b7280',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        minWidth: isMobile ? '100px' : 'auto'
+                      }}>
+                        {language === 'es' ? 'Cantidad' : 'Amount'}
+                      </th>
+                      <th style={{
+                        padding: isMobile ? '0.75rem 0.5rem' : '1rem',
+                        textAlign: 'left',
+                        fontSize: isMobile ? '0.75rem' : '0.875rem',
+                        fontWeight: '600',
+                        color: '#6b7280',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        minWidth: isMobile ? '120px' : 'auto'
+                      }}>
+                        {language === 'es' ? 'Categoría' : 'Category'}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transactions.map((transaction, index) => (
+                      <tr key={index} style={{
+                        borderBottom: '1px solid #f3f4f6'
+                      }}>
+                        <td style={{
+                          padding: isMobile ? '0.75rem 0.5rem' : '1rem',
+                          fontSize: isMobile ? '0.75rem' : '0.875rem',
+                          color: '#374151',
+                          fontWeight: '500'
+                        }}>
+                          {transaction.date}
+                        </td>
+                        <td style={{
+                          padding: isMobile ? '0.75rem 0.5rem' : '1rem',
+                          fontSize: isMobile ? '0.75rem' : '0.875rem',
+                          color: '#374151',
+                          maxWidth: isMobile ? '200px' : 'none',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: isMobile ? 'nowrap' : 'normal'
+                        }}>
+                          {transaction.description}
+                        </td>
+                        <td style={{
+                          padding: isMobile ? '0.75rem 0.5rem' : '1rem',
+                          fontSize: isMobile ? '0.75rem' : '0.875rem',
+                          textAlign: 'right',
+                          color: parseFloat(transaction.amount) < 0 ? '#dc2626' : '#059669',
+                          fontWeight: '600'
+                        }}>
+                          {parseFloat(transaction.amount) < 0 ? '-' : '+'}${Math.abs(parseFloat(transaction.amount)).toFixed(2)}
+                        </td>
+                        <td style={{
+                          padding: isMobile ? '0.75rem 0.5rem' : '1rem',
+                          fontSize: isMobile ? '0.75rem' : '0.875rem',
+                          color: '#6b7280'
+                        }}>
+                          <span style={{
+                            padding: isMobile ? '0.25rem 0.5rem' : '0.375rem 0.75rem',
+                            backgroundColor: '#f3f4f6',
+                            borderRadius: '20px',
+                            fontSize: isMobile ? '0.6875rem' : '0.75rem',
+                            fontWeight: '500',
+                            display: 'inline-block',
+                            maxWidth: isMobile ? '100px' : 'none',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {transaction.category || 'Uncategorized'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!user && (
+          <div style={{
+            backgroundColor: 'white',
+            padding: isMobile ? '2rem 1.5rem' : '4rem',
+            borderRadius: isMobile ? '16px' : '24px',
+            border: '1px solid #e5e7eb',
+            textAlign: 'center',
+            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+            marginBottom: isMobile ? '2rem' : '3rem'
+          }}>
+            <div style={{ fontSize: isMobile ? '3rem' : '4rem', marginBottom: '2rem' }}>🏦</div>
+            <h2 style={{ 
+              fontSize: isMobile ? '2rem' : '2.5rem', 
+              fontWeight: 'bold', 
+              color: '#111827', 
+              marginBottom: '1.5rem' 
+            }}>
+              {language === 'es' ? 'Bienvenido a Balynce' : 'Welcome to Balynce'}
+            </h2>
+            <p style={{ 
+              color: '#6b7280', 
+              marginBottom: '3rem', 
+              maxWidth: '700px', 
+              margin: '0 auto 3rem',
+              fontSize: isMobile ? '1rem' : '1.25rem',
+              lineHeight: '1.6'
+            }}>
+              {language === 'es' 
+                ? 'Analiza tus estados de cuenta bancarios con IA. Obtén insights inteligentes sobre tus gastos y toma mejores decisiones financieras.'
+                : 'Analyze your bank statements with AI. Get smart insights about your spending and make better financial decisions.'
+              }
+            </p>
+            
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))', 
+              gap: isMobile ? '2rem' : '3rem', 
+              marginTop: '3rem',
+              maxWidth: '1000px',
+              margin: '3rem auto 0'
+            }}>
+              <div style={{ 
+                textAlign: 'center',
+                padding: isMobile ? '1.5rem' : '2rem',
+                backgroundColor: '#f8fafc',
+                borderRadius: '20px',
+                border: '1px solid #e2e8f0'
+              }}>
+                <div style={{ fontSize: isMobile ? '2.5rem' : '3rem', marginBottom: '1rem' }}>🤖</div>
+                <h3 style={{ 
+                  fontSize: isMobile ? '1.25rem' : '1.5rem', 
+                  fontWeight: 'bold', 
+                  marginBottom: '1rem', 
+                  color: '#111827' 
+                }}>
+                  {language === 'es' ? 'IA Avanzada' : 'Advanced AI'}
+                </h3>
+                <p style={{ 
+                  color: '#6b7280', 
+                  fontSize: isMobile ? '0.875rem' : '1rem', 
+                  lineHeight: '1.6' 
+                }}>
+                  {language === 'es' 
+                    ? 'Categorización automática y detección inteligente de patrones de gasto'
+                    : 'Automatic categorization and intelligent spending pattern detection'
+                  }
+                </p>
+              </div>
+              
+              <div style={{ 
+                textAlign: 'center',
+                padding: isMobile ? '1.5rem' : '2rem',
+                backgroundColor: '#f8fafc',
+                borderRadius: '20px',
+                border: '1px solid #e2e8f0'
+              }}>
+                <div style={{ fontSize: isMobile ? '2.5rem' : '3rem', marginBottom: '1rem' }}>📊</div>
+                <h3 style={{ 
+                  fontSize: isMobile ? '1.25rem' : '1.5rem', 
+                  fontWeight: 'bold', 
+                  marginBottom: '1rem', 
+                  color: '#111827' 
+                }}>
+                  {language === 'es' ? 'Análisis Detallado' : 'Detailed Analysis'}
+                </h3>
+                <p style={{ 
+                  color: '#6b7280', 
+                  fontSize: isMobile ? '0.875rem' : '1rem', 
+                  lineHeight: '1.6' 
+                }}>
+                  {language === 'es' 
+                    ? 'Visualiza tus gastos e ingresos con categorías automáticas y exportaciones'
+                    : 'Visualize your spending and income with automatic categories and exports'
+                  }
+                </p>
+              </div>
+              
+              <div style={{ 
+                textAlign: 'center',
+                padding: isMobile ? '1.5rem' : '2rem',
+                backgroundColor: '#f8fafc',
+                borderRadius: '20px',
+                border: '1px solid #e2e8f0'
+              }}>
+                <div style={{ fontSize: isMobile ? '2.5rem' : '3rem', marginBottom: '1rem' }}>🔒</div>
+                <h3 style={{ 
+                  fontSize: isMobile ? '1.25rem' : '1.5rem', 
+                  fontWeight: 'bold', 
+                  marginBottom: '1rem', 
+                  color: '#111827' 
+                }}>
+                  {language === 'es' ? 'Seguro y Privado' : 'Secure & Private'}
+                </h3>
+                <p style={{ 
+                  color: '#6b7280', 
+                  fontSize: isMobile ? '0.875rem' : '1rem', 
+                  lineHeight: '1.6' 
+                }}>
+                  {language === 'es' 
+                    ? 'Tus datos se procesan localmente y nunca se almacenan en nuestros servidores'
+                    : 'Your data is processed locally and never stored on our servers'
+                  }
+                </p>
+              </div>
+            </div>
+
+            <div style={{ marginTop: isMobile ? '3rem' : '4rem' }}>
+              <button
+                onClick={() => setShowPricingModal(true)}
+                style={{
+                  padding: isMobile ? '1.5rem 2.5rem' : '1.75rem 3.5rem',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: isMobile ? '16px' : '20px',
+                  fontSize: isMobile ? '1.125rem' : '1.375rem',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: '0 12px 24px -6px rgba(102, 126, 234, 0.4)',
+                  marginBottom: '1rem',
+                  textTransform: 'none',
+                  letterSpacing: '0.025em',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  width: isMobile ? '100%' : 'auto'
+                }}
+              >
+                {language === 'es' ? 'Ver Planes y Precios' : 'View Plans & Pricing'}
+              </button>
+              <p style={{ 
+                fontSize: isMobile ? '0.8125rem' : '0.875rem', 
+                color: '#9ca3af', 
+                marginTop: '1rem' 
+              }}>
+                {language === 'es' 
+                  ? 'Desde $3 por análisis único • Sin compromisos'
+                  : 'Starting at $3 per single parse • No commitments'
+                }
+              </p>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}// @ts-nocheck
 import React, { useState, useEffect } from 'react';
 
 interface Transaction {
@@ -904,8 +1197,32 @@ const createCheckoutSession = async (planId: string, userId: string) => {
   };
 };
 
+// Hook for screen size
+const useScreenSize = () => {
+  const [screenSize, setScreenSize] = useState({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1200,
+    height: typeof window !== 'undefined' ? window.innerHeight : 800
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setScreenSize({
+        width: window.innerWidth,
+        height: window.innerHeight
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return screenSize;
+};
+
 const GoogleSignIn: React.FC<{ onSignIn: (user: User) => void; language: Language }> = ({ onSignIn, language }) => {
   const t = translations[language];
+  const { width } = useScreenSize();
+  const isMobile = width <= 768;
   
   const handleGoogleSignIn = () => {
     const mockUser: User = {
@@ -927,12 +1244,12 @@ const GoogleSignIn: React.FC<{ onSignIn: (user: User) => void; language: Languag
         display: 'flex',
         alignItems: 'center',
         gap: '0.5rem',
-        padding: window.innerWidth <= 768 ? '0.625rem 1rem' : '0.75rem 1.25rem',
+        padding: isMobile ? '0.625rem 1rem' : '0.75rem 1.25rem',
         backgroundColor: 'white',
         border: '2px solid #e5e7eb',
         borderRadius: '12px',
         cursor: 'pointer',
-        fontSize: window.innerWidth <= 768 ? '0.8125rem' : '0.875rem',
+        fontSize: isMobile ? '0.8125rem' : '0.875rem',
         fontWeight: '600',
         color: '#374151',
         transition: 'all 0.2s',
@@ -940,15 +1257,16 @@ const GoogleSignIn: React.FC<{ onSignIn: (user: User) => void; language: Languag
       }}
     >
       <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google" style={{ width: '18px', height: '18px' }} />
-      <span style={{ display: window.innerWidth <= 480 ? 'none' : 'inline' }}>{t.signIn}</span>
-      {window.innerWidth <= 480 && <span>Sign in</span>}
+      <span style={{ display: isMobile && width <= 480 ? 'none' : 'inline' }}>{t.signIn}</span>
+      {isMobile && width <= 480 && <span>Sign in</span>}
     </button>
   );
 };
 
 const UserProfile: React.FC<{ user: User; onSignOut: () => void; onUpgrade: () => void; language: Language }> = ({ user, onSignOut, onUpgrade, language }) => {
   const t = translations[language];
-  const isMobile = window.innerWidth <= 768;
+  const { width } = useScreenSize();
+  const isMobile = width <= 768;
   
   const getPlanDisplay = () => {
     const plan = pricingPlans.find(p => p.id === user.plan);
@@ -960,8 +1278,7 @@ const UserProfile: React.FC<{ user: User; onSignOut: () => void; onUpgrade: () =
     <div style={{ 
       display: 'flex', 
       alignItems: 'center', 
-      gap: isMobile ? '0.5rem' : '1rem',
-      flexDirection: isMobile ? 'column' : 'row'
+      gap: isMobile ? '0.5rem' : '1rem'
     }}>
       {!isMobile && (
         <div style={{ textAlign: 'right', fontSize: '0.875rem' }}>
@@ -990,14 +1307,6 @@ const UserProfile: React.FC<{ user: User; onSignOut: () => void; onUpgrade: () =
             boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)',
             textTransform: 'none',
             letterSpacing: '0.025em'
-          }}
-          onMouseOver={(e) => {
-            e.currentTarget.style.transform = 'translateY(-1px)';
-            e.currentTarget.style.boxShadow = '0 6px 12px -2px rgba(59, 130, 246, 0.4)';
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.transform = 'translateY(0px)';
-            e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(59, 130, 246, 0.3)';
           }}
         >
           {isMobile ? 'Upgrade' : t.upgrade}
@@ -1046,7 +1355,8 @@ const PricingModal: React.FC<{
   language: Language 
 }> = ({ user, onClose, onSelectPlan, language }) => {
   const t = translations[language];
-  const isMobile = window.innerWidth <= 768;
+  const { width } = useScreenSize();
+  const isMobile = width <= 768;
 
   return (
     <div style={{
@@ -1267,7 +1577,8 @@ const PricingModal: React.FC<{
 };
 
 const LanguageToggle: React.FC<{ language: Language; onLanguageChange: (lang: Language) => void }> = ({ language, onLanguageChange }) => {
-  const isMobile = window.innerWidth <= 768;
+  const { width } = useScreenSize();
+  const isMobile = width <= 768;
   
   return (
     <div style={{ 
@@ -1309,14 +1620,17 @@ const LanguageToggle: React.FC<{ language: Language; onLanguageChange: (lang: La
           paddingRight: '2.5rem'
         }}
       >
-        <option value="en" style={{ padding: '0.5rem' }}>EN</option>
-        <option value="es" style={{ padding: '0.5rem' }}>ES</option>
+        <option value="en">English</option>
+        <option value="es">Español</option>
       </select>
     </div>
   );
 };
 
 const Toast: React.FC<{ message: string; type: 'success' | 'error' | 'info'; onClose: () => void }> = ({ message, type, onClose }) => {
+  const { width } = useScreenSize();
+  const isMobile = width <= 768;
+
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose();
@@ -1331,7 +1645,6 @@ const Toast: React.FC<{ message: string; type: 'success' | 'error' | 'info'; onC
   };
 
   const config = colors[type];
-  const isMobile = window.innerWidth <= 768;
 
   return (
     <div style={{
@@ -1368,9 +1681,11 @@ export default function App() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [showPricingModal, setShowPricingModal] = useState(false);
 
+  const { width } = useScreenSize();
+  const isMobile = width <= 768;
+  const isTablet = width <= 1024 && width > 768;
+
   const t = translations[language];
-  const isMobile = window.innerWidth <= 768;
-  const isTablet = window.innerWidth <= 1024 && window.innerWidth > 768;
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ message, type });
@@ -1411,5 +1726,4 @@ export default function App() {
         const updatedUser: User = {
           ...user,
           plan: planId as any,
-          parsesRemaining: plan.parses === 'unlimited' ? 999999 : plan.parses as number,
-          subscriptionEnd: plan.type === '
+          parsesRemaining: plan.parses === 'unlimite
