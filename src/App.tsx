@@ -1,4 +1,711 @@
-// @ts-nocheck
+subscriptionEnd: plan.type === 'monthly' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : undefined
+        };
+        setUser(updatedUser);
+        setShowPricingModal(false);
+        showToast(t.paymentSuccess, 'success');
+      }
+    };
+
+    window.addEventListener('stripe-success', handleStripeSuccess as EventListener);
+    return () => window.removeEventListener('stripe-success', handleStripeSuccess as EventListener);
+  }, [user, t.paymentSuccess]);
+
+  const canUpload = () => {
+    if (!user) return false;
+    if (user.plan === 'unlimited') return true;
+    return user.parsesRemaining > 0;
+  };
+
+  const categorizeTransaction = (description: string, amount: string): string => {
+    const desc = description.toLowerCase().trim();
+    const isExpense = parseFloat(amount) < 0;
+    
+    if (!isExpense) {
+      if (desc.includes('payroll') || desc.includes('salary') || desc.includes('employer')) {
+        return language === 'es' ? t.salary : 'Salary & Wages';
+      }
+      if (desc.includes('transfer') || desc.includes('deposit')) {
+        return language === 'es' ? t.transferIn : 'Transfer In';
+      }
+      return language === 'es' ? t.otherIncome : 'Other Income';
+    }
+    
+    if (desc.includes('mcdonald') || desc.includes('burger king') || desc.includes('taco bell')) {
+      return language === 'es' ? t.fastFood : 'Fast Food';
+    }
+    if (desc.includes('restaurant') || desc.includes('bistro') || desc.includes('grill')) {
+      return language === 'es' ? t.restaurants : 'Restaurants';
+    }
+    if (desc.includes('starbucks') || desc.includes('coffee')) {
+      return language === 'es' ? t.coffee : 'Coffee & Cafes';
+    }
+    if (desc.includes('gas') || desc.includes('fuel')) {
+      return language === 'es' ? t.gas : 'Gas & Fuel';
+    }
+    
+    return language === 'es' ? t.generalExpenses : 'General Expenses';
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!user) {
+      showToast('Please sign in first', 'error');
+      return;
+    }
+
+    if (!canUpload()) {
+      setShowPricingModal(true);
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('File too large. Please use a PDF under 10MB.', 'error');
+      return;
+    }
+
+    if (file.type !== 'application/pdf') {
+      showToast('Please upload a PDF file.', 'error');
+      return;
+    }
+
+    setFileName(file.name);
+    showToast(`Processing ${file.name}...`, 'info');
+    setLoading(true);
+
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js';
+    script.onload = () => {
+      (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+      
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const typed = new Uint8Array(reader.result as ArrayBuffer);
+          const pdf = await (window as any).pdfjsLib.getDocument({ data: typed }).promise;
+          
+          let allText = '';
+          
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            
+            const pageText = content.items
+              .map((item: any) => item.str || '')
+              .filter((text: string) => text.length > 0)
+              .join(' ');
+            
+            allText += '\n' + pageText;
+          }
+
+          const lines = allText.split(/[\n\r]+/).filter(line => line.trim().length > 10);
+          const transactionLines = lines.filter(line => {
+            const hasDate = /\d{2}\/\d{2}/.test(line);
+            const hasAmount = /\d+\.\d{2}/.test(line);
+            const notHeader = !line.includes('Balance') && !line.includes('TOTAL');
+            return hasDate && hasAmount && notHeader;
+          });
+          
+          let parsed: Transaction[] = [];
+          
+          if (transactionLines.length > 0) {
+            parsed = transactionLines.map((line, index) => {
+              const dateMatch = line.match(/(\d{2}\/\d{2})/);
+              const amountMatches = line.match(/-?\d{1,3}(?:,\d{3})*\.\d{2}/g);
+              const lastAmount = amountMatches ? amountMatches[amountMatches.length - 1] : '0.00';
+              
+              let description = line;
+              if (dateMatch) {
+                description = description.replace(dateMatch[0], '').trim();
+              }
+              if (amountMatches) {
+                amountMatches.forEach(amt => {
+                  description = description.replace(amt, '').trim();
+                });
+              }
+              
+              description = description.replace(/\s+/g, ' ').substring(0, 50);
+              
+              return {
+                date: dateMatch ? dateMatch[1] : `${String(index + 1).padStart(2, '0')}/01`,
+                description: description || `Transaction ${index + 1}`,
+                amount: lastAmount.replace(/,/g, ''),
+                category: categorizeTransaction(description, lastAmount)
+              };
+            });
+          }
+
+          if (parsed.length === 0) {
+            showToast('No transactions found. Please check if this is a valid bank statement PDF.', 'error');
+            return;
+          }
+
+          const validTransactions = parsed.filter(t => 
+            t.amount !== '0.00' && 
+            t.description.length > 0 && 
+            !isNaN(parseFloat(t.amount))
+          );
+
+          const updatedUser: User = {
+            ...user,
+            parsesUsed: user.parsesUsed + 1,
+            parsesRemaining: user.plan === 'unlimited' ? 999999 : Math.max(0, user.parsesRemaining - 1)
+          };
+          setUser(updatedUser);
+
+          setTransactions(validTransactions);
+          showToast(`Successfully extracted ${validTransactions.length} transactions!`, 'success');
+          
+        } catch (error) {
+          showToast(`Failed to process PDF: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      reader.onerror = () => {
+        showToast('Failed to read file', 'error');
+        setLoading(false);
+      };
+      
+      reader.readAsArrayBuffer(file);
+    };
+    
+    script.onerror = () => {
+      showToast('Failed to load PDF processing library', 'error');
+      setLoading(false);
+    };
+    
+    document.head.appendChild(script);
+  };
+
+  const totalSpent = transactions
+    .filter(t => parseFloat(t.amount) < 0)
+    .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount)), 0);
+
+  const totalIncome = transactions
+    .filter(t => parseFloat(t.amount) > 0)
+    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+
+  const netAmount = totalIncome - totalSpent;
+
+  // Add CSS for full width and mobile optimization
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      html, body {
+        width: 100%;
+        height: 100%;
+        overflow-x: hidden;
+      }
+      
+      #root {
+        width: 100%;
+        min-height: 100vh;
+      }
+      
+      @media (max-width: 768px) {
+        body {
+          font-size: 14px;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
+  return (
+    <div style={{ 
+      minHeight: '100vh', 
+      backgroundColor: '#f8fafc', 
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      width: '100%',
+      margin: 0,
+      padding: 0,
+      overflowX: 'hidden'
+    }}>
+      {toast && (
+        <Toast 
+          message={toast.message} 
+          type={toast.type} 
+          onClose={() => setToast(null)} 
+        />
+      )}
+
+      {showPricingModal && (
+        <PricingModal 
+          user={user}
+          onClose={() => setShowPricingModal(false)}
+          onSelectPlan={handleSelectPlan}
+          language={language}
+        />
+      )}
+
+      <header style={{
+        backgroundColor: 'white',
+        borderBottom: '1px solid #e5e7eb',
+        padding: isMobile ? '1rem' : '1.5rem 2rem',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        height: isMobile ? '70px' : '90px',
+        boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
+        width: '100%',
+        position: 'relative'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.5rem' : '1rem' }}>
+          <div style={{
+            width: isMobile ? '40px' : '50px',
+            height: isMobile ? '40px' : '50px',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            borderRadius: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            fontWeight: 'bold',
+            fontSize: isMobile ? '1.25rem' : '1.5rem',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+          }}>
+            B
+          </div>
+          <span style={{ 
+            fontSize: isMobile ? '1.5rem' : '2rem', 
+            fontWeight: 'bold', 
+            color: '#111827' 
+          }}>
+            Balynce
+          </span>
+        </div>
+
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: isMobile ? '0.75rem' : '1.5rem',
+          flexWrap: 'wrap'
+        }}>
+          <LanguageToggle language={language} onLanguageChange={setLanguage} />
+          
+          {user ? (
+            <UserProfile 
+              user={user} 
+              onSignOut={handleSignOut} 
+              onUpgrade={() => setShowPricingModal(true)} 
+              language={language}
+            />
+          ) : (
+            <GoogleSignIn onSignIn={handleSignIn} language={language} />
+          )}
+        </div>
+      </header>
+
+      <main style={{ 
+        width: '100%',
+        padding: isMobile ? '1.5rem 1rem' : isTablet ? '2rem 1.5rem' : '3rem 2rem',
+        maxWidth: '1400px',
+        margin: '0 auto',
+        minHeight: `calc(100vh - ${isMobile ? '70px' : '90px'})`,
+        boxSizing: 'border-box'
+      }}>
+        <div style={{ 
+          textAlign: 'center', 
+          paddingTop: isMobile ? '1rem' : '2rem', 
+          marginBottom: isMobile ? '2rem' : '3rem' 
+        }}>
+          <h1 style={{
+            fontSize: isMobile ? '2rem' : isTablet ? '3rem' : '4rem',
+            fontWeight: 'bold',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            color: 'transparent',
+            marginBottom: '1.5rem',
+            lineHeight: '1.1'
+          }}>
+            {t.title}
+          </h1>
+          <p style={{
+            fontSize: isMobile ? '1rem' : isTablet ? '1.25rem' : '1.5rem',
+            color: '#6b7280',
+            marginBottom: isMobile ? '2rem' : '3rem',
+            maxWidth: '800px',
+            margin: '0 auto',
+            lineHeight: '1.6',
+            padding: isMobile ? '0 1rem' : '0'
+          }}>
+            {t.subtitle}
+          </p>
+        </div>
+
+        {user && user.plan !== 'unlimited' && (
+          <div style={{
+            backgroundColor: 'white',
+            border: '2px solid #e5e7eb',
+            borderRadius: '16px',
+            padding: isMobile ? '1rem' : '1.5rem 2rem',
+            marginBottom: isMobile ? '2rem' : '3rem',
+            textAlign: 'center',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: isMobile ? '1rem' : '0'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{
+                width: isMobile ? '40px' : '50px',
+                height: isMobile ? '40px' : '50px',
+                backgroundColor: user.parsesRemaining > 0 ? '#d1fae5' : '#fef2f2',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: isMobile ? '1.25rem' : '1.5rem'
+              }}>
+                {user.parsesRemaining > 0 ? '📊' : '⚠️'}
+              </div>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ 
+                  fontSize: isMobile ? '1rem' : '1.25rem', 
+                  fontWeight: '600', 
+                  color: '#111827' 
+                }}>
+                  {user.parsesRemaining} {t.parsesLeft}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                  {language === 'es' ? 'Plan actual:' : 'Current plan:'} {pricingPlans.find(p => p.id === user.plan)?.[language === 'es' ? 'nameEs' : 'name']}
+                </div>
+              </div>
+            </div>
+            
+            {user.parsesRemaining === 0 && (
+              <button
+                onClick={() => setShowPricingModal(true)}
+                style={{
+                  padding: isMobile ? '1rem 2rem' : '1.25rem 2.5rem',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '16px',
+                  fontSize: isMobile ? '0.875rem' : '1.125rem',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: '0 8px 16px -4px rgba(102, 126, 234, 0.4)',
+                  textTransform: 'none',
+                  letterSpacing: '0.025em',
+                  width: isMobile ? '100%' : 'auto'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+                  e.currentTarget.style.boxShadow = '0 12px 24px -6px rgba(102, 126, 234, 0.5)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0px) scale(1)';
+                  e.currentTarget.style.boxShadow = '0 8px 16px -4px rgba(102, 126, 234, 0.4)';
+                }}
+              >
+                {t.upgrade}
+              </button>
+            )}
+          </div>
+        )}
+
+        <div style={{
+          backgroundColor: 'white',
+          padding: isMobile ? '2rem 1.5rem' : isTablet ? '3rem 2rem' : '4rem',
+          borderRadius: isMobile ? '16px' : '24px',
+          border: user && canUpload() ? '2px dashed #3b82f6' : '2px dashed #e5e7eb',
+          textAlign: 'center',
+          marginBottom: isMobile ? '2rem' : '4rem',
+          width: '100%',
+          maxWidth: '900px',
+          margin: '0 auto',
+          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+        }}>
+          <div style={{
+            width: isMobile ? '60px' : '80px',
+            height: isMobile ? '60px' : '80px',
+            backgroundColor: loading ? '#f59e0b' : user && canUpload() ? '#dbeafe' : '#f3f4f6',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 2rem',
+            fontSize: isMobile ? '1.5rem' : '2rem'
+          }}>
+            {loading ? '⏳' : user && canUpload() ? '⬆️' : '🔒'}
+          </div>
+
+          <h3 style={{
+            fontSize: isMobile ? '1.5rem' : '2rem',
+            fontWeight: 'bold',
+            color: '#111827',
+            marginBottom: '1rem'
+          }}>
+            {fileName || t.uploadTitle}
+          </h3>
+
+          <p style={{
+            color: '#6b7280',
+            fontSize: isMobile ? '1rem' : '1.125rem',
+            marginBottom: '2rem',
+            maxWidth: '600px',
+            margin: '0 auto 2rem',
+            lineHeight: '1.5'
+          }}>
+            {!user 
+              ? (language === 'es' ? 'Inicia sesión para comenzar a analizar tus estados de cuenta' : 'Sign in to start analyzing your bank statements')
+              : !canUpload()
+              ? t.needUpgrade
+              : (language === 'es' ? 'Arrastra y suelta tu archivo PDF aquí o haz clic para seleccionar' : 'Drag and drop your PDF file here or click to select')
+            }
+          </p>
+
+          <input
+            type="file"
+            accept=".pdf"
+            onChange={handleFileUpload}
+            style={{ display: 'none' }}
+            id="file-upload"
+            disabled={loading || !user || !canUpload()}
+          />
+
+          <label
+            htmlFor="file-upload"
+            style={{
+              display: 'inline-block',
+              padding: isMobile ? '1.25rem 2rem' : '1.5rem 3rem',
+              background: !user || !canUpload() 
+                ? 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)' 
+                : loading 
+                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
+                  : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+              color: 'white',
+              borderRadius: isMobile ? '16px' : '20px',
+              cursor: !user || !canUpload() || loading ? 'not-allowed' : 'pointer',
+              fontSize: isMobile ? '1rem' : '1.25rem',
+              fontWeight: '700',
+              marginBottom: '1.5rem',
+              boxShadow: !user || !canUpload() 
+                ? '0 4px 6px -1px rgba(156, 163, 175, 0.3)' 
+                : loading 
+                  ? '0 8px 16px -4px rgba(245, 158, 11, 0.4)' 
+                  : '0 8px 16px -4px rgba(59, 130, 246, 0.4)',
+              transition: 'all 0.3s ease',
+              border: 'none',
+              textTransform: 'none',
+              letterSpacing: '0.025em',
+              position: 'relative',
+              overflow: 'hidden',
+              width: isMobile ? '100%' : 'auto'
+            }}
+            onMouseOver={(e) => {
+              if (user && canUpload() && !loading) {
+                e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
+                e.currentTarget.style.boxShadow = '0 12px 24px -6px rgba(59, 130, 246, 0.5)';
+              }
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = 'translateY(0px) scale(1)';
+              e.currentTarget.style.boxShadow = !user || !canUpload() 
+                ? '0 4px 6px -1px rgba(156, 163, 175, 0.3)' 
+                : loading 
+                  ? '0 8px 16px -4px rgba(245, 158, 11, 0.4)' 
+                  : '0 8px 16px -4px rgba(59, 130, 246, 0.4)';
+            }}
+          >
+            {!user ? t.signIn : !canUpload() ? t.upgrade : (fileName ? t.uploadAnother : t.selectFile)}
+          </label>
+        </div>
+
+        {transactions.length > 0 && user && (
+          <div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : isTablet ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: isMobile ? '1.5rem' : '2rem',
+              marginBottom: isMobile ? '2rem' : '3rem',
+              width: '100%'
+            }}>
+              <div style={{
+                backgroundColor: 'white',
+                padding: isMobile ? '1.5rem' : '2rem',
+                borderRadius: '20px',
+                border: '1px solid #e5e7eb',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+              }}>
+                <div>
+                  <div style={{
+                    fontSize: isMobile ? '0.875rem' : '1rem',
+                    fontWeight: '600',
+                    color: '#6b7280',
+                    marginBottom: '0.5rem'
+                  }}>
+                    {t.totalSpent}
+                  </div>
+                  <div style={{ 
+                    fontSize: isMobile ? '2rem' : '2.5rem', 
+                    fontWeight: 'bold', 
+                    color: '#dc2626' 
+                  }}>
+                    ${totalSpent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+                <div style={{
+                  width: isMobile ? '56px' : '64px',
+                  height: isMobile ? '56px' : '64px',
+                  backgroundColor: '#fee2e2',
+                  color: '#dc2626',
+                  borderRadius: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: isMobile ? '1.75rem' : '2rem'
+                }}>
+                  💸
+                </div>
+              </div>
+
+              <div style={{
+                backgroundColor: 'white',
+                padding: isMobile ? '1.5rem' : '2rem',
+                borderRadius: '20px',
+                border: '1px solid #e5e7eb',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+              }}>
+                <div>
+                  <div style={{
+                    fontSize: isMobile ? '0.875rem' : '1rem',
+                    fontWeight: '600',
+                    color: '#6b7280',
+                    marginBottom: '0.5rem'
+                  }}>
+                    {t.totalIncome}
+                  </div>
+                  <div style={{ 
+                    fontSize: isMobile ? '2rem' : '2.5rem', 
+                    fontWeight: 'bold', 
+                    color: '#059669' 
+                  }}>
+                    ${totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+                <div style={{
+                  width: isMobile ? '56px' : '64px',
+                  height: isMobile ? '56px' : '64px',
+                  backgroundColor: '#d1fae5',
+                  color: '#059669',
+                  borderRadius: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: isMobile ? '1.75rem' : '2rem'
+                }}>
+                  💰
+                </div>
+              </div>
+
+              <div style={{
+                backgroundColor: 'white',
+                padding: isMobile ? '1.5rem' : '2rem',
+                borderRadius: '20px',
+                border: '1px solid #e5e7eb',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                gridColumn: isMobile ? '1' : isTablet ? '1 / -1' : 'auto'
+              }}>
+                <div>
+                  <div style={{
+                    fontSize: isMobile ? '0.875rem' : '1rem',
+                    fontWeight: '600',
+                    color: '#6b7280',
+                    marginBottom: '0.5rem'
+                  }}>
+                    {t.netAmount}
+                  </div>
+                  <div style={{
+                    fontSize: isMobile ? '2rem' : '2.5rem',
+                    fontWeight: 'bold',
+                    color: netAmount >= 0 ? '#059669' : '#dc2626'
+                  }}>
+                    {netAmount >= 0 ? '+' : ''}${Math.abs(netAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+                <div style={{
+                  width: isMobile ? '56px' : '64px',
+                  height: isMobile ? '56px' : '64px',
+                  backgroundColor: netAmount >= 0 ? '#d1fae5' : '#fee2e2',
+                  color: netAmount >= 0 ? '#059669' : '#dc2626',
+                  borderRadius: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: isMobile ? '1.75rem' : '2rem'
+                }}>
+                  {netAmount >= 0 ? '📈' : '📉'}
+                </div>
+              </div>
+            </div>
+
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: isMobile ? '16px' : '24px',
+              border: '1px solid #e5e7eb',
+              overflow: 'hidden',
+              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+            }}>
+              <div style={{
+                padding: isMobile ? '1.5rem' : '2rem',
+                borderBottom: '1px solid #e5e7eb',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexDirection: isMobile ? 'column' : 'row',
+                gap: isMobile ? '1rem' : '0'
+              }}>
+                <h3 style={{ 
+                  fontSize: isMobile ? '1.25rem' : '1.5rem', 
+                  fontWeight: 'bold', 
+                  color: '#111827',
+                  textAlign: isMobile ? 'center' : 'left'
+                }}>
+                  📋 {t.transactions} ({transactions.length})
+                </h3>
+                <div style={{ 
+                  display: 'flex', 
+                  gap: '1rem',
+                  width: isMobile ? '100%' : 'auto'
+                }}>
+                  <button
+                    onClick={() => {
+                      const csv = [
+                        'Date,Description,Amount,Category',
+                        ...transactions.map(t => `${t.date},"${t.description}",${t.amount},${t.category || 'Uncategorized'}`)
+                      ].join('\n');
+                      
+                      const blob = new Blob([csv], { type: 'text/csv' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('// @ts-nocheck
 import React, { useState, useEffect } from 'react';
 
 interface Transaction {
@@ -220,12 +927,12 @@ const GoogleSignIn: React.FC<{ onSignIn: (user: User) => void; language: Languag
         display: 'flex',
         alignItems: 'center',
         gap: '0.5rem',
-        padding: '0.75rem 1.25rem',
+        padding: window.innerWidth <= 768 ? '0.625rem 1rem' : '0.75rem 1.25rem',
         backgroundColor: 'white',
         border: '2px solid #e5e7eb',
         borderRadius: '12px',
         cursor: 'pointer',
-        fontSize: '0.875rem',
+        fontSize: window.innerWidth <= 768 ? '0.8125rem' : '0.875rem',
         fontWeight: '600',
         color: '#374151',
         transition: 'all 0.2s',
@@ -233,13 +940,15 @@ const GoogleSignIn: React.FC<{ onSignIn: (user: User) => void; language: Languag
       }}
     >
       <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google" style={{ width: '18px', height: '18px' }} />
-      {t.signIn}
+      <span style={{ display: window.innerWidth <= 480 ? 'none' : 'inline' }}>{t.signIn}</span>
+      {window.innerWidth <= 480 && <span>Sign in</span>}
     </button>
   );
 };
 
 const UserProfile: React.FC<{ user: User; onSignOut: () => void; onUpgrade: () => void; language: Language }> = ({ user, onSignOut, onUpgrade, language }) => {
   const t = translations[language];
+  const isMobile = window.innerWidth <= 768;
   
   const getPlanDisplay = () => {
     const plan = pricingPlans.find(p => p.id === user.plan);
@@ -248,26 +957,33 @@ const UserProfile: React.FC<{ user: User; onSignOut: () => void; onUpgrade: () =
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-      <div style={{ textAlign: 'right', fontSize: '0.875rem' }}>
-        <div style={{ fontWeight: '600', color: '#374151' }}>{getPlanDisplay()}</div>
-        {user.plan !== 'unlimited' && (
-          <div style={{ color: '#6b7280', fontSize: '0.75rem' }}>
-            {user.parsesRemaining} {t.parsesLeft}
-          </div>
-        )}
-      </div>
+    <div style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: isMobile ? '0.5rem' : '1rem',
+      flexDirection: isMobile ? 'column' : 'row'
+    }}>
+      {!isMobile && (
+        <div style={{ textAlign: 'right', fontSize: '0.875rem' }}>
+          <div style={{ fontWeight: '600', color: '#374151' }}>{getPlanDisplay()}</div>
+          {user.plan !== 'unlimited' && (
+            <div style={{ color: '#6b7280', fontSize: '0.75rem' }}>
+              {user.parsesRemaining} {t.parsesLeft}
+            </div>
+          )}
+        </div>
+      )}
 
       {user.plan !== 'unlimited' && (
         <button
           onClick={onUpgrade}
           style={{
-            padding: '0.75rem 1.5rem',
+            padding: isMobile ? '0.5rem 1rem' : '0.75rem 1.5rem',
             background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
             color: 'white',
             border: 'none',
             borderRadius: '12px',
-            fontSize: '0.875rem',
+            fontSize: isMobile ? '0.75rem' : '0.875rem',
             fontWeight: '600',
             cursor: 'pointer',
             transition: 'all 0.2s ease',
@@ -284,7 +1000,7 @@ const UserProfile: React.FC<{ user: User; onSignOut: () => void; onUpgrade: () =
             e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(59, 130, 246, 0.3)';
           }}
         >
-          {t.upgrade}
+          {isMobile ? 'Upgrade' : t.upgrade}
         </button>
       )}
       
@@ -292,25 +1008,32 @@ const UserProfile: React.FC<{ user: User; onSignOut: () => void; onUpgrade: () =
         <img
           src={user.profilePicture || 'https://via.placeholder.com/40'}
           alt={user.name}
-          style={{ width: '40px', height: '40px', borderRadius: '50%', border: '2px solid #e5e7eb' }}
+          style={{ 
+            width: isMobile ? '32px' : '40px', 
+            height: isMobile ? '32px' : '40px', 
+            borderRadius: '50%', 
+            border: '2px solid #e5e7eb' 
+          }}
         />
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontSize: '0.875rem', fontWeight: '600', color: '#111827' }}>{user.name}</span>
-          <button
-            onClick={onSignOut}
-            style={{
-              fontSize: '0.75rem',
-              color: '#6b7280',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: 0,
-              textAlign: 'left'
-            }}
-          >
-            {t.signOut}
-          </button>
-        </div>
+        {!isMobile && (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '0.875rem', fontWeight: '600', color: '#111827' }}>{user.name}</span>
+            <button
+              onClick={onSignOut}
+              style={{
+                fontSize: '0.75rem',
+                color: '#6b7280',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                textAlign: 'left'
+              }}
+            >
+              {t.signOut}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -323,6 +1046,7 @@ const PricingModal: React.FC<{
   language: Language 
 }> = ({ user, onClose, onSelectPlan, language }) => {
   const t = translations[language];
+  const isMobile = window.innerWidth <= 768;
 
   return (
     <div style={{
@@ -336,12 +1060,12 @@ const PricingModal: React.FC<{
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 1000,
-      padding: '2rem'
+      padding: isMobile ? '1rem' : '2rem'
     }}>
       <div style={{
         backgroundColor: 'white',
-        borderRadius: '24px',
-        maxWidth: '1000px',
+        borderRadius: isMobile ? '16px' : '24px',
+        maxWidth: isMobile ? '100%' : '1000px',
         width: '100%',
         maxHeight: '90vh',
         overflow: 'auto',
@@ -352,14 +1076,14 @@ const PricingModal: React.FC<{
           onClick={onClose}
           style={{
             position: 'absolute',
-            top: '1.5rem',
-            right: '1.5rem',
-            width: '40px',
-            height: '40px',
+            top: '1rem',
+            right: '1rem',
+            width: '36px',
+            height: '36px',
             borderRadius: '50%',
             backgroundColor: '#f3f4f6',
             border: 'none',
-            fontSize: '1.25rem',
+            fontSize: '1.125rem',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -372,15 +1096,22 @@ const PricingModal: React.FC<{
 
         <div style={{
           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          padding: '3rem 2rem 2rem',
-          borderRadius: '24px 24px 0 0',
+          padding: isMobile ? '2rem 1rem 1.5rem' : '3rem 2rem 2rem',
+          borderRadius: isMobile ? '16px 16px 0 0' : '24px 24px 0 0',
           textAlign: 'center',
           color: 'white'
         }}>
-          <h2 style={{ fontSize: '2.5rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+          <h2 style={{ 
+            fontSize: isMobile ? '1.875rem' : '2.5rem', 
+            fontWeight: 'bold', 
+            marginBottom: '0.5rem' 
+          }}>
             {t.choosePlan}
           </h2>
-          <p style={{ fontSize: '1.125rem', opacity: 0.9 }}>
+          <p style={{ 
+            fontSize: isMobile ? '1rem' : '1.125rem', 
+            opacity: 0.9 
+          }}>
             {language === 'es' 
               ? 'Elige el plan perfecto para tus necesidades'
               : 'Choose the perfect plan for your needs'
@@ -388,11 +1119,11 @@ const PricingModal: React.FC<{
           </p>
         </div>
 
-        <div style={{ padding: '3rem 2rem' }}>
+        <div style={{ padding: isMobile ? '2rem 1rem' : '3rem 2rem' }}>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-            gap: '2rem',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(300px, 1fr))',
+            gap: isMobile ? '1.5rem' : '2rem',
             maxWidth: '900px',
             margin: '0 auto'
           }}>
@@ -402,12 +1133,12 @@ const PricingModal: React.FC<{
                 style={{
                   border: plan.popular ? '3px solid #3b82f6' : '2px solid #e5e7eb',
                   borderRadius: '20px',
-                  padding: '2rem',
+                  padding: isMobile ? '1.5rem' : '2rem',
                   textAlign: 'center',
                   position: 'relative',
                   backgroundColor: 'white',
                   transition: 'all 0.3s',
-                  transform: plan.popular ? 'scale(1.05)' : 'scale(1)',
+                  transform: plan.popular && !isMobile ? 'scale(1.05)' : 'scale(1)',
                   boxShadow: plan.popular 
                     ? '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
                     : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
@@ -423,7 +1154,7 @@ const PricingModal: React.FC<{
                     color: 'white',
                     padding: '0.5rem 1.5rem',
                     borderRadius: '20px',
-                    fontSize: '0.875rem',
+                    fontSize: isMobile ? '0.75rem' : '0.875rem',
                     fontWeight: '600'
                   }}>
                     {t.popular}
@@ -431,7 +1162,7 @@ const PricingModal: React.FC<{
                 )}
 
                 <h3 style={{
-                  fontSize: '1.5rem',
+                  fontSize: isMobile ? '1.25rem' : '1.5rem',
                   fontWeight: 'bold',
                   color: '#111827',
                   marginBottom: '1rem'
@@ -441,14 +1172,14 @@ const PricingModal: React.FC<{
 
                 <div style={{ marginBottom: '2rem' }}>
                   <span style={{
-                    fontSize: '3rem',
+                    fontSize: isMobile ? '2.5rem' : '3rem',
                     fontWeight: 'bold',
                     color: '#111827'
                   }}>
                     ${plan.price}
                   </span>
                   <span style={{
-                    fontSize: '1rem',
+                    fontSize: isMobile ? '0.875rem' : '1rem',
                     color: '#6b7280',
                     marginLeft: '0.5rem'
                   }}>
@@ -459,7 +1190,7 @@ const PricingModal: React.FC<{
                 <div style={{
                   textAlign: 'left',
                   marginBottom: '2rem',
-                  fontSize: '0.875rem',
+                  fontSize: isMobile ? '0.8125rem' : '0.875rem',
                   color: '#374151'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
@@ -504,7 +1235,7 @@ const PricingModal: React.FC<{
                   disabled={user?.plan === plan.id}
                   style={{
                     width: '100%',
-                    padding: '1rem 2rem',
+                    padding: isMobile ? '0.875rem 1.5rem' : '1rem 2rem',
                     backgroundColor: user?.plan === plan.id 
                       ? '#6b7280' 
                       : plan.popular 
@@ -513,7 +1244,7 @@ const PricingModal: React.FC<{
                     color: 'white',
                     border: 'none',
                     borderRadius: '12px',
-                    fontSize: '1rem',
+                    fontSize: isMobile ? '0.875rem' : '1rem',
                     fontWeight: '600',
                     cursor: user?.plan === plan.id ? 'not-allowed' : 'pointer',
                     transition: 'all 0.2s'
@@ -536,20 +1267,22 @@ const PricingModal: React.FC<{
 };
 
 const LanguageToggle: React.FC<{ language: Language; onLanguageChange: (lang: Language) => void }> = ({ language, onLanguageChange }) => {
+  const isMobile = window.innerWidth <= 768;
+  
   return (
     <div style={{ 
       display: 'flex', 
       alignItems: 'center', 
-      gap: '0.75rem',
+      gap: isMobile ? '0.5rem' : '0.75rem',
       background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-      padding: '0.75rem 1rem',
+      padding: isMobile ? '0.5rem 0.75rem' : '0.75rem 1rem',
       borderRadius: '12px',
       border: '2px solid #e2e8f0',
       boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
       transition: 'all 0.2s ease'
     }}>
       <span style={{ 
-        fontSize: '1.25rem',
+        fontSize: isMobile ? '1rem' : '1.25rem',
         filter: 'grayscale(0)',
         opacity: 0.8
       }}>🌐</span>
@@ -557,17 +1290,17 @@ const LanguageToggle: React.FC<{ language: Language; onLanguageChange: (lang: La
         value={language}
         onChange={(e) => onLanguageChange(e.target.value as Language)}
         style={{
-          padding: '0.5rem 0.75rem',
+          padding: isMobile ? '0.375rem 0.5rem' : '0.5rem 0.75rem',
           border: 'none',
           borderRadius: '8px',
-          fontSize: '0.875rem',
+          fontSize: isMobile ? '0.8125rem' : '0.875rem',
           backgroundColor: 'white',
           fontWeight: '600',
           cursor: 'pointer',
           color: '#1e293b',
           boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
           outline: 'none',
-          minWidth: '100px',
+          minWidth: isMobile ? '80px' : '100px',
           appearance: 'none',
           backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
           backgroundPosition: 'right 0.5rem center',
@@ -576,8 +1309,8 @@ const LanguageToggle: React.FC<{ language: Language; onLanguageChange: (lang: La
           paddingRight: '2.5rem'
         }}
       >
-        <option value="en" style={{ padding: '0.5rem' }}>English</option>
-        <option value="es" style={{ padding: '0.5rem' }}>Español</option>
+        <option value="en" style={{ padding: '0.5rem' }}>EN</option>
+        <option value="es" style={{ padding: '0.5rem' }}>ES</option>
       </select>
     </div>
   );
@@ -598,20 +1331,22 @@ const Toast: React.FC<{ message: string; type: 'success' | 'error' | 'info'; onC
   };
 
   const config = colors[type];
+  const isMobile = window.innerWidth <= 768;
 
   return (
     <div style={{
       position: 'fixed',
       top: '20px',
-      right: '20px',
+      right: isMobile ? '10px' : '20px',
+      left: isMobile ? '10px' : 'auto',
       backgroundColor: config.bg,
       color: 'white',
-      padding: '1rem 1.25rem',
+      padding: isMobile ? '0.875rem 1rem' : '1rem 1.25rem',
       borderRadius: '12px',
       border: `2px solid ${config.border}`,
       zIndex: 1001,
-      maxWidth: '400px',
-      fontSize: '0.875rem',
+      maxWidth: isMobile ? 'calc(100vw - 20px)' : '400px',
+      fontSize: isMobile ? '0.8125rem' : '0.875rem',
       fontWeight: '500',
       boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
       display: 'flex',
@@ -634,6 +1369,8 @@ export default function App() {
   const [showPricingModal, setShowPricingModal] = useState(false);
 
   const t = translations[language];
+  const isMobile = window.innerWidth <= 768;
+  const isTablet = window.innerWidth <= 1024 && window.innerWidth > 768;
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ message, type });
@@ -675,909 +1412,4 @@ export default function App() {
           ...user,
           plan: planId as any,
           parsesRemaining: plan.parses === 'unlimited' ? 999999 : plan.parses as number,
-          subscriptionEnd: plan.type === 'monthly' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : undefined
-        };
-        setUser(updatedUser);
-        setShowPricingModal(false);
-        showToast(t.paymentSuccess, 'success');
-      }
-    };
-
-    window.addEventListener('stripe-success', handleStripeSuccess as EventListener);
-    return () => window.removeEventListener('stripe-success', handleStripeSuccess as EventListener);
-  }, [user, t.paymentSuccess]);
-
-  const canUpload = () => {
-    if (!user) return false;
-    if (user.plan === 'unlimited') return true;
-    return user.parsesRemaining > 0;
-  };
-
-  const categorizeTransaction = (description: string, amount: string): string => {
-    const desc = description.toLowerCase().trim();
-    const isExpense = parseFloat(amount) < 0;
-    
-    if (!isExpense) {
-      if (desc.includes('payroll') || desc.includes('salary') || desc.includes('employer')) {
-        return language === 'es' ? t.salary : 'Salary & Wages';
-      }
-      if (desc.includes('transfer') || desc.includes('deposit')) {
-        return language === 'es' ? t.transferIn : 'Transfer In';
-      }
-      return language === 'es' ? t.otherIncome : 'Other Income';
-    }
-    
-    if (desc.includes('mcdonald') || desc.includes('burger king') || desc.includes('taco bell')) {
-      return language === 'es' ? t.fastFood : 'Fast Food';
-    }
-    if (desc.includes('restaurant') || desc.includes('bistro') || desc.includes('grill')) {
-      return language === 'es' ? t.restaurants : 'Restaurants';
-    }
-    if (desc.includes('starbucks') || desc.includes('coffee')) {
-      return language === 'es' ? t.coffee : 'Coffee & Cafes';
-    }
-    if (desc.includes('gas') || desc.includes('fuel')) {
-      return language === 'es' ? t.gas : 'Gas & Fuel';
-    }
-    
-    return language === 'es' ? t.generalExpenses : 'General Expenses';
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!user) {
-      showToast('Please sign in first', 'error');
-      return;
-    }
-
-    if (!canUpload()) {
-      setShowPricingModal(true);
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      showToast('File too large. Please use a PDF under 10MB.', 'error');
-      return;
-    }
-
-    if (file.type !== 'application/pdf') {
-      showToast('Please upload a PDF file.', 'error');
-      return;
-    }
-
-    setFileName(file.name);
-    showToast(`Processing ${file.name}...`, 'info');
-    setLoading(true);
-
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js';
-    script.onload = () => {
-      (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
-      
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const typed = new Uint8Array(reader.result as ArrayBuffer);
-          const pdf = await (window as any).pdfjsLib.getDocument({ data: typed }).promise;
-          
-          let allText = '';
-          
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const content = await page.getTextContent();
-            
-            const pageText = content.items
-              .map((item: any) => item.str || '')
-              .filter((text: string) => text.length > 0)
-              .join(' ');
-            
-            allText += '\n' + pageText;
-          }
-
-          const lines = allText.split(/[\n\r]+/).filter(line => line.trim().length > 10);
-          const transactionLines = lines.filter(line => {
-            const hasDate = /\d{2}\/\d{2}/.test(line);
-            const hasAmount = /\d+\.\d{2}/.test(line);
-            const notHeader = !line.includes('Balance') && !line.includes('TOTAL');
-            return hasDate && hasAmount && notHeader;
-          });
-          
-          let parsed: Transaction[] = [];
-          
-          if (transactionLines.length > 0) {
-            parsed = transactionLines.map((line, index) => {
-              const dateMatch = line.match(/(\d{2}\/\d{2})/);
-              const amountMatches = line.match(/-?\d{1,3}(?:,\d{3})*\.\d{2}/g);
-              const lastAmount = amountMatches ? amountMatches[amountMatches.length - 1] : '0.00';
-              
-              let description = line;
-              if (dateMatch) {
-                description = description.replace(dateMatch[0], '').trim();
-              }
-              if (amountMatches) {
-                amountMatches.forEach(amt => {
-                  description = description.replace(amt, '').trim();
-                });
-              }
-              
-              description = description.replace(/\s+/g, ' ').substring(0, 50);
-              
-              return {
-                date: dateMatch ? dateMatch[1] : `${String(index + 1).padStart(2, '0')}/01`,
-                description: description || `Transaction ${index + 1}`,
-                amount: lastAmount.replace(/,/g, ''),
-                category: categorizeTransaction(description, lastAmount)
-              };
-            });
-          }
-
-          if (parsed.length === 0) {
-            showToast('No transactions found. Please check if this is a valid bank statement PDF.', 'error');
-            return;
-          }
-
-          const validTransactions = parsed.filter(t => 
-            t.amount !== '0.00' && 
-            t.description.length > 0 && 
-            !isNaN(parseFloat(t.amount))
-          );
-
-          const updatedUser: User = {
-            ...user,
-            parsesUsed: user.parsesUsed + 1,
-            parsesRemaining: user.plan === 'unlimited' ? 999999 : Math.max(0, user.parsesRemaining - 1)
-          };
-          setUser(updatedUser);
-
-          setTransactions(validTransactions);
-          showToast(`Successfully extracted ${validTransactions.length} transactions!`, 'success');
-          
-        } catch (error) {
-          showToast(`Failed to process PDF: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
-        } finally {
-          setLoading(false);
-        }
-      };
-      
-      reader.onerror = () => {
-        showToast('Failed to read file', 'error');
-        setLoading(false);
-      };
-      
-      reader.readAsArrayBuffer(file);
-    };
-    
-    script.onerror = () => {
-      showToast('Failed to load PDF processing library', 'error');
-      setLoading(false);
-    };
-    
-    document.head.appendChild(script);
-  };
-
-  const totalSpent = transactions
-    .filter(t => parseFloat(t.amount) < 0)
-    .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount)), 0);
-
-  const totalIncome = transactions
-    .filter(t => parseFloat(t.amount) > 0)
-    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-
-  const netAmount = totalIncome - totalSpent;
-
-  return (
-    <div style={{ 
-      minHeight: '100vh', 
-      backgroundColor: '#f8fafc', 
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      width: '100%',
-      margin: 0,
-      padding: 0,
-      boxSizing: 'border-box'
-    }}>
-      {toast && (
-        <Toast 
-          message={toast.message} 
-          type={toast.type} 
-          onClose={() => setToast(null)} 
-        />
-      )}
-
-      {showPricingModal && (
-        <PricingModal 
-          user={user}
-          onClose={() => setShowPricingModal(false)}
-          onSelectPlan={handleSelectPlan}
-          language={language}
-        />
-      )}
-
-      <header style={{
-        backgroundColor: 'white',
-        borderBottom: '1px solid #e5e7eb',
-        padding: '1.5rem 2rem',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        height: '90px',
-        boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
-        width: '100%',
-        margin: 0
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{
-            width: '50px',
-            height: '50px',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            borderRadius: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            fontWeight: 'bold',
-            fontSize: '1.5rem',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-          }}>
-            B
-          </div>
-          <span style={{ fontSize: '2rem', fontWeight: 'bold', color: '#111827' }}>
-            Balynce
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          <LanguageToggle language={language} onLanguageChange={setLanguage} />
-          
-          {user ? (
-            <UserProfile 
-              user={user} 
-              onSignOut={handleSignOut} 
-              onUpgrade={() => setShowPricingModal(true)} 
-              language={language}
-            />
-          ) : (
-            <GoogleSignIn onSignIn={handleSignIn} language={language} />
-          )}
-        </div>
-      </header>
-
-      <main style={{ 
-        margin: '0 auto', 
-        padding: '3rem 2rem', 
-        width: '100%', 
-        maxWidth: '1400px',
-        minHeight: 'calc(100vh - 90px)',
-        boxSizing: 'border-box'
-      }}>
-        <div style={{ textAlign: 'center', paddingTop: '2rem', marginBottom: '3rem' }}>
-          <h1 style={{
-            fontSize: '4rem',
-            fontWeight: 'bold',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            color: 'transparent',
-            marginBottom: '1.5rem',
-            lineHeight: '1.1'
-          }}>
-            {t.title}
-          </h1>
-          <p style={{
-            fontSize: '1.5rem',
-            color: '#6b7280',
-            marginBottom: '3rem',
-            maxWidth: '800px',
-            margin: '0 auto 3rem',
-            lineHeight: '1.6'
-          }}>
-            {t.subtitle}
-          </p>
-        </div>
-
-        {user && user.plan !== 'unlimited' && (
-          <div style={{
-            backgroundColor: 'white',
-            border: '2px solid #e5e7eb',
-            borderRadius: '16px',
-            padding: '1.5rem 2rem',
-            marginBottom: '3rem',
-            textAlign: 'center',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{
-                width: '50px',
-                height: '50px',
-                backgroundColor: user.parsesRemaining > 0 ? '#d1fae5' : '#fef2f2',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '1.5rem'
-              }}>
-                {user.parsesRemaining > 0 ? '📊' : '⚠️'}
-              </div>
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>
-                  {user.parsesRemaining} {t.parsesLeft}
-                </div>
-                <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
-                  {language === 'es' ? 'Plan actual:' : 'Current plan:'} {pricingPlans.find(p => p.id === user.plan)?.[language === 'es' ? 'nameEs' : 'name']}
-                </div>
-              </div>
-            </div>
-            
-            {user.parsesRemaining === 0 && (
-              <button
-                onClick={() => setShowPricingModal(true)}
-                style={{
-                  padding: '1.25rem 2.5rem',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '16px',
-                  fontSize: '1.125rem',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  boxShadow: '0 8px 16px -4px rgba(102, 126, 234, 0.4)',
-                  textTransform: 'none',
-                  letterSpacing: '0.025em'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
-                  e.currentTarget.style.boxShadow = '0 12px 24px -6px rgba(102, 126, 234, 0.5)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0px) scale(1)';
-                  e.currentTarget.style.boxShadow = '0 8px 16px -4px rgba(102, 126, 234, 0.4)';
-                }}
-              >
-                {t.upgrade}
-              </button>
-            )}
-          </div>
-        )}
-
-        <div style={{
-          backgroundColor: 'white',
-          padding: '4rem',
-          borderRadius: '24px',
-          border: user && canUpload() ? '2px dashed #3b82f6' : '2px dashed #e5e7eb',
-          textAlign: 'center',
-          marginBottom: '4rem',
-          width: '100%',
-          maxWidth: '900px',
-          margin: '0 auto 4rem auto',
-          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-        }}>
-          <div style={{
-            width: '80px',
-            height: '80px',
-            backgroundColor: loading ? '#f59e0b' : user && canUpload() ? '#dbeafe' : '#f3f4f6',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 2rem',
-            fontSize: '2rem'
-          }}>
-            {loading ? '⏳' : user && canUpload() ? '⬆️' : '🔒'}
-          </div>
-
-          <h3 style={{
-            fontSize: '2rem',
-            fontWeight: 'bold',
-            color: '#111827',
-            marginBottom: '1rem'
-          }}>
-            {fileName || t.uploadTitle}
-          </h3>
-
-          <p style={{
-            color: '#6b7280',
-            fontSize: '1.125rem',
-            marginBottom: '2rem',
-            maxWidth: '600px',
-            margin: '0 auto 2rem'
-          }}>
-            {!user 
-              ? (language === 'es' ? 'Inicia sesión para comenzar a analizar tus estados de cuenta' : 'Sign in to start analyzing your bank statements')
-              : !canUpload()
-              ? t.needUpgrade
-              : (language === 'es' ? 'Arrastra y suelta tu archivo PDF aquí o haz clic para seleccionar' : 'Drag and drop your PDF file here or click to select')
-            }
-          </p>
-
-          <input
-            type="file"
-            accept=".pdf"
-            onChange={handleFileUpload}
-            style={{ display: 'none' }}
-            id="file-upload"
-            disabled={loading || !user || !canUpload()}
-          />
-
-          <label
-            htmlFor="file-upload"
-            style={{
-              display: 'inline-block',
-              padding: '1.5rem 3rem',
-              background: !user || !canUpload() 
-                ? 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)' 
-                : loading 
-                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
-                  : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-              color: 'white',
-              borderRadius: '20px',
-              cursor: !user || !canUpload() || loading ? 'not-allowed' : 'pointer',
-              fontSize: '1.25rem',
-              fontWeight: '700',
-              marginBottom: '1.5rem',
-              boxShadow: !user || !canUpload() 
-                ? '0 4px 6px -1px rgba(156, 163, 175, 0.3)' 
-                : loading 
-                  ? '0 8px 16px -4px rgba(245, 158, 11, 0.4)' 
-                  : '0 8px 16px -4px rgba(59, 130, 246, 0.4)',
-              transition: 'all 0.3s ease',
-              border: 'none',
-              textTransform: 'none',
-              letterSpacing: '0.025em',
-              position: 'relative',
-              overflow: 'hidden'
-            }}
-            onMouseOver={(e) => {
-              if (user && canUpload() && !loading) {
-                e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
-                e.currentTarget.style.boxShadow = '0 12px 24px -6px rgba(59, 130, 246, 0.5)';
-              }
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.transform = 'translateY(0px) scale(1)';
-              e.currentTarget.style.boxShadow = !user || !canUpload() 
-                ? '0 4px 6px -1px rgba(156, 163, 175, 0.3)' 
-                : loading 
-                  ? '0 8px 16px -4px rgba(245, 158, 11, 0.4)' 
-                  : '0 8px 16px -4px rgba(59, 130, 246, 0.4)';
-            }}
-          >
-            {!user ? t.signIn : !canUpload() ? t.upgrade : (fileName ? t.uploadAnother : t.selectFile)}
-          </label>
-        </div>
-
-        {transactions.length > 0 && user && (
-          <div>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-              gap: '2rem',
-              marginBottom: '3rem',
-              width: '100%'
-            }}>
-              <div style={{
-                backgroundColor: 'white',
-                padding: '2rem',
-                borderRadius: '20px',
-                border: '1px solid #e5e7eb',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-              }}>
-                <div>
-                  <div style={{
-                    fontSize: '1rem',
-                    fontWeight: '600',
-                    color: '#6b7280',
-                    marginBottom: '0.5rem'
-                  }}>
-                    {t.totalSpent}
-                  </div>
-                  <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#dc2626' }}>
-                    ${totalSpent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                </div>
-                <div style={{
-                  width: '64px',
-                  height: '64px',
-                  backgroundColor: '#fee2e2',
-                  color: '#dc2626',
-                  borderRadius: '20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '2rem'
-                }}>
-                  💸
-                </div>
-              </div>
-
-              <div style={{
-                backgroundColor: 'white',
-                padding: '2rem',
-                borderRadius: '20px',
-                border: '1px solid #e5e7eb',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-              }}>
-                <div>
-                  <div style={{
-                    fontSize: '1rem',
-                    fontWeight: '600',
-                    color: '#6b7280',
-                    marginBottom: '0.5rem'
-                  }}>
-                    {t.totalIncome}
-                  </div>
-                  <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#059669' }}>
-                    ${totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                </div>
-                <div style={{
-                  width: '64px',
-                  height: '64px',
-                  backgroundColor: '#d1fae5',
-                  color: '#059669',
-                  borderRadius: '20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '2rem'
-                }}>
-                  💰
-                </div>
-              </div>
-
-              <div style={{
-                backgroundColor: 'white',
-                padding: '2rem',
-                borderRadius: '20px',
-                border: '1px solid #e5e7eb',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-              }}>
-                <div>
-                  <div style={{
-                    fontSize: '1rem',
-                    fontWeight: '600',
-                    color: '#6b7280',
-                    marginBottom: '0.5rem'
-                  }}>
-                    {t.netAmount}
-                  </div>
-                  <div style={{
-                    fontSize: '2.5rem',
-                    fontWeight: 'bold',
-                    color: netAmount >= 0 ? '#059669' : '#dc2626'
-                  }}>
-                    {netAmount >= 0 ? '+' : ''}${Math.abs(netAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                </div>
-                <div style={{
-                  width: '64px',
-                  height: '64px',
-                  backgroundColor: netAmount >= 0 ? '#d1fae5' : '#fee2e2',
-                  color: netAmount >= 0 ? '#059669' : '#dc2626',
-                  borderRadius: '20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '2rem'
-                }}>
-                  {netAmount >= 0 ? '📈' : '📉'}
-                </div>
-              </div>
-            </div>
-
-            <div style={{
-              backgroundColor: 'white',
-              borderRadius: '24px',
-              border: '1px solid #e5e7eb',
-              overflow: 'hidden',
-              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-            }}>
-              <div style={{
-                padding: '2rem',
-                borderBottom: '1px solid #e5e7eb',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#111827' }}>
-                  📋 {t.transactions} ({transactions.length})
-                </h3>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <button
-                    onClick={() => {
-                      const csv = [
-                        'Date,Description,Amount,Category',
-                        ...transactions.map(t => `${t.date},"${t.description}",${t.amount},${t.category || 'Uncategorized'}`)
-                      ].join('\n');
-                      
-                      const blob = new Blob([csv], { type: 'text/csv' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `${fileName?.replace('.pdf', '') || 'transactions'}.csv`;
-                      a.click();
-                      URL.revokeObjectURL(url);
-                      showToast('CSV exported!', 'success');
-                    }}
-                    style={{
-                      padding: '0.875rem 1.75rem',
-                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '12px',
-                      fontSize: '0.875rem',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)',
-                      textTransform: 'none',
-                      letterSpacing: '0.025em'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                      e.currentTarget.style.boxShadow = '0 6px 12px -2px rgba(16, 185, 129, 0.4)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0px)';
-                      e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(16, 185, 129, 0.3)';
-                    }}
-                  >
-                    📄 {t.exportCsv}
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead style={{ backgroundColor: '#f9fafb', position: 'sticky', top: 0 }}>
-                    <tr>
-                      <th style={{
-                        padding: '1rem',
-                        textAlign: 'left',
-                        fontSize: '0.875rem',
-                        fontWeight: '600',
-                        color: '#6b7280',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                      }}>
-                        {language === 'es' ? 'Fecha' : 'Date'}
-                      </th>
-                      <th style={{
-                        padding: '1rem',
-                        textAlign: 'left',
-                        fontSize: '0.875rem',
-                        fontWeight: '600',
-                        color: '#6b7280',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                      }}>
-                        {language === 'es' ? 'Descripción' : 'Description'}
-                      </th>
-                      <th style={{
-                        padding: '1rem',
-                        textAlign: 'right',
-                        fontSize: '0.875rem',
-                        fontWeight: '600',
-                        color: '#6b7280',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                      }}>
-                        {language === 'es' ? 'Cantidad' : 'Amount'}
-                      </th>
-                      <th style={{
-                        padding: '1rem',
-                        textAlign: 'left',
-                        fontSize: '0.875rem',
-                        fontWeight: '600',
-                        color: '#6b7280',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                      }}>
-                        {language === 'es' ? 'Categoría' : 'Category'}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {transactions.map((transaction, index) => (
-                      <tr key={index} style={{
-                        borderBottom: '1px solid #f3f4f6'
-                      }}>
-                        <td style={{
-                          padding: '1rem',
-                          fontSize: '0.875rem',
-                          color: '#374151',
-                          fontWeight: '500'
-                        }}>
-                          {transaction.date}
-                        </td>
-                        <td style={{
-                          padding: '1rem',
-                          fontSize: '0.875rem',
-                          color: '#374151'
-                        }}>
-                          {transaction.description}
-                        </td>
-                        <td style={{
-                          padding: '1rem',
-                          fontSize: '0.875rem',
-                          textAlign: 'right',
-                          color: parseFloat(transaction.amount) < 0 ? '#dc2626' : '#059669',
-                          fontWeight: '600'
-                        }}>
-                          {parseFloat(transaction.amount) < 0 ? '-' : '+'}${Math.abs(parseFloat(transaction.amount)).toFixed(2)}
-                        </td>
-                        <td style={{
-                          padding: '1rem',
-                          fontSize: '0.875rem',
-                          color: '#6b7280'
-                        }}>
-                          <span style={{
-                            padding: '0.375rem 0.75rem',
-                            backgroundColor: '#f3f4f6',
-                            borderRadius: '20px',
-                            fontSize: '0.75rem',
-                            fontWeight: '500'
-                          }}>
-                            {transaction.category || 'Uncategorized'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {!user && (
-          <div style={{
-            backgroundColor: 'white',
-            padding: '4rem',
-            borderRadius: '24px',
-            border: '1px solid #e5e7eb',
-            textAlign: 'center',
-            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-            marginBottom: '3rem'
-          }}>
-            <div style={{ fontSize: '4rem', marginBottom: '2rem' }}>🏦</div>
-            <h2 style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#111827', marginBottom: '1.5rem' }}>
-              {language === 'es' ? 'Bienvenido a Balynce' : 'Welcome to Balynce'}
-            </h2>
-            <p style={{ 
-              color: '#6b7280', 
-              marginBottom: '3rem', 
-              maxWidth: '700px', 
-              margin: '0 auto 3rem',
-              fontSize: '1.25rem',
-              lineHeight: '1.6'
-            }}>
-              {language === 'es' 
-                ? 'Analiza tus estados de cuenta bancarios con IA. Obtén insights inteligentes sobre tus gastos y toma mejores decisiones financieras.'
-                : 'Analyze your bank statements with AI. Get smart insights about your spending and make better financial decisions.'
-              }
-            </p>
-            
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
-              gap: '3rem', 
-              marginTop: '3rem',
-              maxWidth: '1000px',
-              margin: '3rem auto 0'
-            }}>
-              <div style={{ 
-                textAlign: 'center',
-                padding: '2rem',
-                backgroundColor: '#f8fafc',
-                borderRadius: '20px',
-                border: '1px solid #e2e8f0'
-              }}>
-                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🤖</div>
-                <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem', color: '#111827' }}>
-                  {language === 'es' ? 'IA Avanzada' : 'Advanced AI'}
-                </h3>
-                <p style={{ color: '#6b7280', fontSize: '1rem', lineHeight: '1.6' }}>
-                  {language === 'es' 
-                    ? 'Categorización automática y detección inteligente de patrones de gasto'
-                    : 'Automatic categorization and intelligent spending pattern detection'
-                  }
-                </p>
-              </div>
-              
-              <div style={{ 
-                textAlign: 'center',
-                padding: '2rem',
-                backgroundColor: '#f8fafc',
-                borderRadius: '20px',
-                border: '1px solid #e2e8f0'
-              }}>
-                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📊</div>
-                <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem', color: '#111827' }}>
-                  {language === 'es' ? 'Análisis Detallado' : 'Detailed Analysis'}
-                </h3>
-                <p style={{ color: '#6b7280', fontSize: '1rem', lineHeight: '1.6' }}>
-                  {language === 'es' 
-                    ? 'Visualiza tus gastos e ingresos con categorías automáticas y exportaciones'
-                    : 'Visualize your spending and income with automatic categories and exports'
-                  }
-                </p>
-              </div>
-              
-              <div style={{ 
-                textAlign: 'center',
-                padding: '2rem',
-                backgroundColor: '#f8fafc',
-                borderRadius: '20px',
-                border: '1px solid #e2e8f0'
-              }}>
-                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔒</div>
-                <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem', color: '#111827' }}>
-                  {language === 'es' ? 'Seguro y Privado' : 'Secure & Private'}
-                </h3>
-                <p style={{ color: '#6b7280', fontSize: '1rem', lineHeight: '1.6' }}>
-                  {language === 'es' 
-                    ? 'Tus datos se procesan localmente y nunca se almacenan en nuestros servidores'
-                    : 'Your data is processed locally and never stored on our servers'
-                  }
-                </p>
-              </div>
-            </div>
-
-            <div style={{ marginTop: '4rem' }}>
-              <button
-                onClick={() => setShowPricingModal(true)}
-                style={{
-                  padding: '1.75rem 3.5rem',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '20px',
-                  fontSize: '1.375rem',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  boxShadow: '0 12px 24px -6px rgba(102, 126, 234, 0.4)',
-                  marginBottom: '1rem',
-                  textTransform: 'none',
-                  letterSpacing: '0.025em',
-                  position: 'relative',
-                  overflow: 'hidden'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)';
-                  e.currentTarget.style.boxShadow = '0 16px 32px -8px rgba(102, 126, 234, 0.5)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0px) scale(1)';
-                  e.currentTarget.style.boxShadow = '0 12px 24px -6px rgba(102, 126, 234, 0.4)';
-                }}
-              >
-                {language === 'es' ? 'Ver Planes y Precios' : 'View Plans & Pricing'}
-              </button>
-              <p style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '1rem' }}>
-                {language === 'es' 
-                  ? 'Desde $3 por análisis único • Sin compromisos'
-                  : 'Starting at $3 per single parse • No commitments'
-                }
-              </p>
-            </div>
-          </div>
-        )}
-      </main>
-    </div>
-  );
-}
+          subscriptionEnd: plan.type === '
