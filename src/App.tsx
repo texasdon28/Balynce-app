@@ -1,4 +1,732 @@
-parsesRemaining: plan.parses === 'unlimited' ? 999999 : plan.parses as number,
+// @ts-nocheck
+import React, { useState, useEffect } from 'react';
+
+interface Transaction {
+  date: string;
+  description: string;
+  amount: string;
+  category?: string;
+}
+
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  profilePicture?: string;
+  plan: 'free' | 'single' | 'monthly' | 'unlimited';
+  parsesUsed: number;
+  parsesRemaining: number;
+  subscriptionEnd?: Date;
+  stripeCustomerId?: string;
+}
+
+type Language = 'en' | 'es';
+
+interface PricingPlan {
+  id: string;
+  name: string;
+  nameEs: string;
+  price: number;
+  type: 'one-time' | 'monthly';
+  parses: number | 'unlimited';
+  insights: boolean;
+  popular?: boolean;
+}
+
+const pricingPlans: PricingPlan[] = [
+  {
+    id: 'single',
+    name: 'Single Parse',
+    nameEs: 'Análisis Único',
+    price: 3,
+    type: 'one-time',
+    parses: 1,
+    insights: false
+  },
+  {
+    id: 'monthly',
+    name: 'Monthly Plan',
+    nameEs: 'Plan Mensual',
+    price: 9,
+    type: 'monthly',
+    parses: 5,
+    insights: true,
+    popular: true
+  },
+  {
+    id: 'unlimited',
+    name: 'Unlimited Plan',
+    nameEs: 'Plan Ilimitado',
+    price: 25,
+    type: 'monthly',
+    parses: 'unlimited',
+    insights: true
+  }
+];
+
+const translations = {
+  en: {
+    signIn: 'Sign in with Google',
+    signOut: 'Sign Out',
+    upgrade: 'Upgrade Plan',
+    language: 'Language',
+    title: 'Transform Your Bank Statements Into Actionable Data',
+    subtitle: 'Upload PDFs. Extract transactions. Categorize with AI. Get Smart Insights.',
+    uploadTitle: 'Upload Bank Statement (PDF)',
+    selectFile: 'Select PDF File',
+    uploadAnother: 'Upload Another PDF',
+    choosePlan: 'Choose Your Plan',
+    oneTime: 'One-time',
+    monthly: 'Monthly',
+    popular: 'Most Popular',
+    parse: 'parse',
+    parses: 'parses',
+    unlimited: 'Unlimited',
+    buyNow: 'Buy Now',
+    subscribe: 'Subscribe',
+    currentPlan: 'Current Plan',
+    parsesLeft: 'parses remaining',
+    basicParsing: 'Basic PDF parsing',
+    smartInsights: 'Smart spending insights',
+    categoryAnalysis: 'Category analysis',
+    exportOptions: 'Export options',
+    prioritySupport: 'Priority support',
+    totalSpent: 'Total Spent',
+    totalIncome: 'Total Income',
+    netAmount: 'Net Amount',
+    transactions: 'Transactions',
+    exportCsv: 'Export CSV',
+    quickbooks: 'QuickBooks',
+    needUpgrade: 'Upgrade to continue parsing',
+    paymentSuccess: 'Payment successful! 🎉',
+    paymentError: 'Payment failed. Please try again.',
+    salary: 'Salary & Wages',
+    transferIn: 'Transfer In',
+    otherIncome: 'Other Income',
+    fastFood: 'Fast Food',
+    restaurants: 'Restaurants',
+    coffee: 'Coffee & Cafes',
+    foodDelivery: 'Food Delivery',
+    gas: 'Gas & Fuel',
+    autoPayment: 'Auto Payment',
+    rideshare: 'Rideshare',
+    movies: 'Movies & Theater',
+    subscriptions: 'Subscriptions',
+    onlineShopping: 'Online Shopping',
+    generalShopping: 'General Shopping',
+    clothing: 'Clothing & Fashion',
+    technology: 'Technology',
+    personalTransfers: 'Personal Transfers',
+    generalExpenses: 'General Expenses'
+  },
+  es: {
+    signIn: 'Iniciar sesión con Google',
+    signOut: 'Cerrar Sesión',
+    upgrade: 'Mejorar Plan',
+    language: 'Idioma',
+    title: 'Transforma tus Estados de Cuenta en Datos Útiles',
+    subtitle: 'Sube PDFs. Extrae transacciones. Categoriza con IA. Obtén Insights Inteligentes.',
+    uploadTitle: 'Subir Estado de Cuenta (PDF)',
+    selectFile: 'Seleccionar Archivo PDF',
+    uploadAnother: 'Subir Otro PDF',
+    choosePlan: 'Elige tu Plan',
+    oneTime: 'Una vez',
+    monthly: 'Mensual',
+    popular: 'Más Popular',
+    parse: 'análisis',
+    parses: 'análisis',
+    unlimited: 'Ilimitado',
+    buyNow: 'Comprar Ahora',
+    subscribe: 'Suscribirse',
+    currentPlan: 'Plan Actual',
+    parsesLeft: 'análisis restantes',
+    basicParsing: 'Análisis básico de PDF',
+    smartInsights: 'Insights inteligentes de gastos',
+    categoryAnalysis: 'Análisis de categorías',
+    exportOptions: 'Opciones de exportación',
+    prioritySupport: 'Soporte prioritario',
+    totalSpent: 'Total Gastado',
+    totalIncome: 'Ingresos Totales',
+    netAmount: 'Cantidad Neta',
+    transactions: 'Transacciones',
+    exportCsv: 'Exportar CSV',
+    quickbooks: 'QuickBooks',
+    needUpgrade: 'Mejora tu plan para continuar',
+    paymentSuccess: '¡Pago exitoso! 🎉',
+    paymentError: 'Pago falló. Inténtalo de nuevo.',
+    salary: 'Salario y Sueldos',
+    transferIn: 'Transferencia Entrante',
+    otherIncome: 'Otros Ingresos',
+    fastFood: 'Comida Rápida',
+    restaurants: 'Restaurantes',
+    coffee: 'Café y Cafeterías',
+    foodDelivery: 'Entrega de Comida',
+    gas: 'Gasolina y Combustible',
+    autoPayment: 'Pago de Auto',
+    rideshare: 'Viajes Compartidos',
+    movies: 'Películas y Teatro',
+    subscriptions: 'Suscripciones',
+    onlineShopping: 'Compras en Línea',
+    generalShopping: 'Compras Generales',
+    clothing: 'Ropa y Moda',
+    technology: 'Tecnología',
+    personalTransfers: 'Transferencias Personales',
+    generalExpenses: 'Gastos Generales'
+  }
+};
+
+const initializeStripe = () => {
+  return {
+    redirectToCheckout: async (sessionId: string) => {
+      console.log('Redirecting to Stripe checkout:', sessionId);
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('stripe-success', { 
+          detail: { sessionId, planId: sessionId.split('-')[1] } 
+        }));
+      }, 2000);
+    }
+  };
+};
+
+const createCheckoutSession = async (planId: string, userId: string) => {
+  const plan = pricingPlans.find(p => p.id === planId);
+  console.log('Creating checkout session for:', plan);
+  
+  return {
+    sessionId: `session-${planId}-${userId}-${Date.now()}`
+  };
+};
+
+// Hook for screen size
+const useScreenSize = () => {
+  const [screenSize, setScreenSize] = useState({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1200,
+    height: typeof window !== 'undefined' ? window.innerHeight : 800
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setScreenSize({
+        width: window.innerWidth,
+        height: window.innerHeight
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return screenSize;
+};
+
+const GoogleSignIn: React.FC<{ onSignIn: (user: User) => void; language: Language }> = ({ onSignIn, language }) => {
+  const t = translations[language];
+  const { width } = useScreenSize();
+  const isMobile = width <= 768;
+  
+  const handleGoogleSignIn = () => {
+    const mockUser: User = {
+      id: '123',
+      email: 'user@example.com',
+      name: 'John Doe',
+      profilePicture: 'https://via.placeholder.com/40',
+      plan: 'free',
+      parsesUsed: 0,
+      parsesRemaining: 0
+    };
+    onSignIn(mockUser);
+  };
+
+  return (
+    <button
+      onClick={handleGoogleSignIn}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.5rem',
+        padding: isMobile ? '0.625rem 1rem' : '0.75rem 1.25rem',
+        backgroundColor: 'white',
+        border: '2px solid #e5e7eb',
+        borderRadius: '12px',
+        cursor: 'pointer',
+        fontSize: isMobile ? '0.8125rem' : '0.875rem',
+        fontWeight: '600',
+        color: '#374151',
+        transition: 'all 0.2s',
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+      }}
+    >
+      <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google" style={{ width: '18px', height: '18px' }} />
+      <span style={{ display: isMobile && width <= 480 ? 'none' : 'inline' }}>{t.signIn}</span>
+      {isMobile && width <= 480 && <span>Sign in</span>}
+    </button>
+  );
+};
+
+const UserProfile: React.FC<{ user: User; onSignOut: () => void; onUpgrade: () => void; language: Language }> = ({ user, onSignOut, onUpgrade, language }) => {
+  const t = translations[language];
+  const { width } = useScreenSize();
+  const isMobile = width <= 768;
+  
+  const getPlanDisplay = () => {
+    const plan = pricingPlans.find(p => p.id === user.plan);
+    if (!plan) return user.plan;
+    return language === 'es' ? plan.nameEs : plan.name;
+  };
+
+  return (
+    <div style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: isMobile ? '0.5rem' : '1rem'
+    }}>
+      {!isMobile && (
+        <div style={{ textAlign: 'right', fontSize: '0.875rem' }}>
+          <div style={{ fontWeight: '600', color: '#374151' }}>{getPlanDisplay()}</div>
+          {user.plan !== 'unlimited' && (
+            <div style={{ color: '#6b7280', fontSize: '0.75rem' }}>
+              {user.parsesRemaining} {t.parsesLeft}
+            </div>
+          )}
+        </div>
+      )}
+
+      {user.plan !== 'unlimited' && (
+        <button
+          onClick={onUpgrade}
+          style={{
+            padding: isMobile ? '0.5rem 1rem' : '0.75rem 1.5rem',
+            background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '12px',
+            fontSize: isMobile ? '0.75rem' : '0.875rem',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)',
+            textTransform: 'none',
+            letterSpacing: '0.025em'
+          }}
+        >
+          {isMobile ? 'Upgrade' : t.upgrade}
+        </button>
+      )}
+      
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <img
+          src={user.profilePicture || 'https://via.placeholder.com/40'}
+          alt={user.name}
+          style={{ 
+            width: isMobile ? '32px' : '40px', 
+            height: isMobile ? '32px' : '40px', 
+            borderRadius: '50%', 
+            border: '2px solid #e5e7eb' 
+          }}
+        />
+        {!isMobile && (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '0.875rem', fontWeight: '600', color: '#111827' }}>{user.name}</span>
+            <button
+              onClick={onSignOut}
+              style={{
+                fontSize: '0.75rem',
+                color: '#6b7280',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                textAlign: 'left'
+              }}
+            >
+              {t.signOut}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const PricingModal: React.FC<{ 
+  user: User | null; 
+  onClose: () => void; 
+  onSelectPlan: (planId: string) => void; 
+  language: Language 
+}> = ({ user, onClose, onSelectPlan, language }) => {
+  const t = translations[language];
+  const { width } = useScreenSize();
+  const isMobile = width <= 768;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.75)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+      padding: isMobile ? '1rem' : '2rem'
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: isMobile ? '16px' : '24px',
+        maxWidth: isMobile ? '100%' : '1000px',
+        width: '100%',
+        maxHeight: '90vh',
+        overflow: 'auto',
+        position: 'relative',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+      }}>
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            top: '1rem',
+            right: '1rem',
+            width: '36px',
+            height: '36px',
+            borderRadius: '50%',
+            backgroundColor: '#f3f4f6',
+            border: 'none',
+            fontSize: '1.125rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10
+          }}
+        >
+          ✕
+        </button>
+
+        <div style={{
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          padding: isMobile ? '2rem 1rem 1.5rem' : '3rem 2rem 2rem',
+          borderRadius: isMobile ? '16px 16px 0 0' : '24px 24px 0 0',
+          textAlign: 'center',
+          color: 'white'
+        }}>
+          <h2 style={{ 
+            fontSize: isMobile ? '1.875rem' : '2.5rem', 
+            fontWeight: 'bold', 
+            marginBottom: '0.5rem' 
+          }}>
+            {t.choosePlan}
+          </h2>
+          <p style={{ 
+            fontSize: isMobile ? '1rem' : '1.125rem', 
+            opacity: 0.9 
+          }}>
+            {language === 'es' 
+              ? 'Elige el plan perfecto para tus necesidades'
+              : 'Choose the perfect plan for your needs'
+            }
+          </p>
+        </div>
+
+        <div style={{ padding: isMobile ? '2rem 1rem' : '3rem 2rem' }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(300px, 1fr))',
+            gap: isMobile ? '1.5rem' : '2rem',
+            maxWidth: '900px',
+            margin: '0 auto'
+          }}>
+            {pricingPlans.map((plan) => (
+              <div
+                key={plan.id}
+                style={{
+                  border: plan.popular ? '3px solid #3b82f6' : '2px solid #e5e7eb',
+                  borderRadius: '20px',
+                  padding: isMobile ? '1.5rem' : '2rem',
+                  textAlign: 'center',
+                  position: 'relative',
+                  backgroundColor: 'white',
+                  transition: 'all 0.3s',
+                  transform: plan.popular && !isMobile ? 'scale(1.05)' : 'scale(1)',
+                  boxShadow: plan.popular 
+                    ? '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+                    : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+                }}
+              >
+                {plan.popular && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '-12px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    padding: '0.5rem 1.5rem',
+                    borderRadius: '20px',
+                    fontSize: isMobile ? '0.75rem' : '0.875rem',
+                    fontWeight: '600'
+                  }}>
+                    {t.popular}
+                  </div>
+                )}
+
+                <h3 style={{
+                  fontSize: isMobile ? '1.25rem' : '1.5rem',
+                  fontWeight: 'bold',
+                  color: '#111827',
+                  marginBottom: '1rem'
+                }}>
+                  {language === 'es' ? plan.nameEs : plan.name}
+                </h3>
+
+                <div style={{ marginBottom: '2rem' }}>
+                  <span style={{
+                    fontSize: isMobile ? '2.5rem' : '3rem',
+                    fontWeight: 'bold',
+                    color: '#111827'
+                  }}>
+                    ${plan.price}
+                  </span>
+                  <span style={{
+                    fontSize: isMobile ? '0.875rem' : '1rem',
+                    color: '#6b7280',
+                    marginLeft: '0.5rem'
+                  }}>
+                    {plan.type === 'monthly' ? `/${t.monthly.toLowerCase()}` : t.oneTime.toLowerCase()}
+                  </span>
+                </div>
+
+                <div style={{
+                  textAlign: 'left',
+                  marginBottom: '2rem',
+                  fontSize: isMobile ? '0.8125rem' : '0.875rem',
+                  color: '#374151'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                    <span style={{ color: '#10b981', fontSize: '1rem' }}>✓</span>
+                    <span>
+                      {plan.parses === 'unlimited' 
+                        ? t.unlimited 
+                        : `${plan.parses} ${plan.parses === 1 ? t.parse : t.parses}`
+                      } {language === 'es' ? 'por mes' : 'per month'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                    <span style={{ color: '#10b981', fontSize: '1rem' }}>✓</span>
+                    <span>{t.basicParsing}</span>
+                  </div>
+                  {plan.insights && (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                        <span style={{ color: '#10b981', fontSize: '1rem' }}>✓</span>
+                        <span>{t.smartInsights}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                        <span style={{ color: '#10b981', fontSize: '1rem' }}>✓</span>
+                        <span>{t.categoryAnalysis}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                        <span style={{ color: '#10b981', fontSize: '1rem' }}>✓</span>
+                        <span>{t.exportOptions}</span>
+                      </div>
+                    </>
+                  )}
+                  {plan.id === 'unlimited' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                      <span style={{ color: '#10b981', fontSize: '1rem' }}>✓</span>
+                      <span>{t.prioritySupport}</span>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => onSelectPlan(plan.id)}
+                  disabled={user?.plan === plan.id}
+                  style={{
+                    width: '100%',
+                    padding: isMobile ? '0.875rem 1.5rem' : '1rem 2rem',
+                    backgroundColor: user?.plan === plan.id 
+                      ? '#6b7280' 
+                      : plan.popular 
+                        ? '#3b82f6' 
+                        : '#111827',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: isMobile ? '0.875rem' : '1rem',
+                    fontWeight: '600',
+                    cursor: user?.plan === plan.id ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {user?.plan === plan.id 
+                    ? t.currentPlan
+                    : plan.type === 'monthly' 
+                      ? t.subscribe 
+                      : t.buyNow
+                  }
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const LanguageToggle: React.FC<{ language: Language; onLanguageChange: (lang: Language) => void }> = ({ language, onLanguageChange }) => {
+  const { width } = useScreenSize();
+  const isMobile = width <= 768;
+  
+  return (
+    <div style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: isMobile ? '0.5rem' : '0.75rem',
+      background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+      padding: isMobile ? '0.5rem 0.75rem' : '0.75rem 1rem',
+      borderRadius: '12px',
+      border: '2px solid #e2e8f0',
+      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+      transition: 'all 0.2s ease'
+    }}>
+      <span style={{ 
+        fontSize: isMobile ? '1rem' : '1.25rem',
+        filter: 'grayscale(0)',
+        opacity: 0.8
+      }}>🌐</span>
+      <select
+        value={language}
+        onChange={(e) => onLanguageChange(e.target.value as Language)}
+        style={{
+          padding: isMobile ? '0.375rem 0.5rem' : '0.5rem 0.75rem',
+          border: 'none',
+          borderRadius: '8px',
+          fontSize: isMobile ? '0.8125rem' : '0.875rem',
+          backgroundColor: 'white',
+          fontWeight: '600',
+          cursor: 'pointer',
+          color: '#1e293b',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+          outline: 'none',
+          minWidth: isMobile ? '80px' : '100px',
+          appearance: 'none',
+          backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
+          backgroundPosition: 'right 0.5rem center',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: '1.5em 1.5em',
+          paddingRight: '2.5rem'
+        }}
+      >
+        <option value="en">English</option>
+        <option value="es">Español</option>
+      </select>
+    </div>
+  );
+};
+
+const Toast: React.FC<{ message: string; type: 'success' | 'error' | 'info'; onClose: () => void }> = ({ message, type, onClose }) => {
+  const { width } = useScreenSize();
+  const isMobile = width <= 768;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const colors = {
+    success: { bg: '#10b981', border: '#059669', icon: '🎉' },
+    error: { bg: '#ef4444', border: '#dc2626', icon: '❌' },
+    info: { bg: '#3b82f6', border: '#2563eb', icon: 'ℹ️' }
+  };
+
+  const config = colors[type];
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: '20px',
+      right: isMobile ? '10px' : '20px',
+      left: isMobile ? '10px' : 'auto',
+      backgroundColor: config.bg,
+      color: 'white',
+      padding: isMobile ? '0.875rem 1rem' : '1rem 1.25rem',
+      borderRadius: '12px',
+      border: `2px solid ${config.border}`,
+      zIndex: 1001,
+      maxWidth: isMobile ? 'calc(100vw - 20px)' : '400px',
+      fontSize: isMobile ? '0.8125rem' : '0.875rem',
+      fontWeight: '500',
+      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.75rem'
+    }}>
+      <span style={{ fontSize: '1.25rem' }}>{config.icon}</span>
+      <span>{message}</span>
+    </div>
+  );
+};
+
+export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [language, setLanguage] = useState<Language>('en');
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [fileName, setFileName] = useState('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [showPricingModal, setShowPricingModal] = useState(false);
+
+  const { width } = useScreenSize();
+  const isMobile = width <= 768;
+  const isTablet = width <= 1024 && width > 768;
+
+  const t = translations[language];
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+  };
+
+  const handleSignIn = (signedInUser: User) => {
+    setUser(signedInUser);
+    showToast(`Welcome, ${signedInUser.name}!`, 'success');
+  };
+
+  const handleSignOut = () => {
+    setUser(null);
+    setTransactions([]);
+    showToast('Signed out successfully', 'info');
+  };
+
+  const handleSelectPlan = async (planId: string) => {
+    if (!user) return;
+
+    try {
+      showToast('Redirecting to payment...', 'info');
+      
+      const { sessionId } = await createCheckoutSession(planId, user.id);
+      const stripe = initializeStripe();
+      await stripe.redirectToCheckout(sessionId);
+      
+    } catch (error) {
+      showToast(t.paymentError, 'error');
+    }
+  };
+
+  useEffect(() => {
+    const handleStripeSuccess = (event: CustomEvent) => {
+      const { planId } = event.detail;
+      const plan = pricingPlans.find(p => p.id === planId);
+      
+      if (user && plan) {
+        const updatedUser: User = {
+          ...user,
+          plan: planId as any,
+          parsesRemaining: plan.parses === 'unlimited' ? 999999 : plan.parses as number,
           subscriptionEnd: plan.type === 'monthly' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : undefined
         };
         setUser(updatedUser);
@@ -998,732 +1726,4 @@ parsesRemaining: plan.parses === 'unlimited' ? 999999 : plan.parses as number,
       </main>
     </div>
   );
-}// @ts-nocheck
-import React, { useState, useEffect } from 'react';
-
-interface Transaction {
-  date: string;
-  description: string;
-  amount: string;
-  category?: string;
 }
-
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  profilePicture?: string;
-  plan: 'free' | 'single' | 'monthly' | 'unlimited';
-  parsesUsed: number;
-  parsesRemaining: number;
-  subscriptionEnd?: Date;
-  stripeCustomerId?: string;
-}
-
-type Language = 'en' | 'es';
-
-interface PricingPlan {
-  id: string;
-  name: string;
-  nameEs: string;
-  price: number;
-  type: 'one-time' | 'monthly';
-  parses: number | 'unlimited';
-  insights: boolean;
-  popular?: boolean;
-}
-
-const pricingPlans: PricingPlan[] = [
-  {
-    id: 'single',
-    name: 'Single Parse',
-    nameEs: 'Análisis Único',
-    price: 3,
-    type: 'one-time',
-    parses: 1,
-    insights: false
-  },
-  {
-    id: 'monthly',
-    name: 'Monthly Plan',
-    nameEs: 'Plan Mensual',
-    price: 9,
-    type: 'monthly',
-    parses: 5,
-    insights: true,
-    popular: true
-  },
-  {
-    id: 'unlimited',
-    name: 'Unlimited Plan',
-    nameEs: 'Plan Ilimitado',
-    price: 25,
-    type: 'monthly',
-    parses: 'unlimited',
-    insights: true
-  }
-];
-
-const translations = {
-  en: {
-    signIn: 'Sign in with Google',
-    signOut: 'Sign Out',
-    upgrade: 'Upgrade Plan',
-    language: 'Language',
-    title: 'Transform Your Bank Statements Into Actionable Data',
-    subtitle: 'Upload PDFs. Extract transactions. Categorize with AI. Get Smart Insights.',
-    uploadTitle: 'Upload Bank Statement (PDF)',
-    selectFile: 'Select PDF File',
-    uploadAnother: 'Upload Another PDF',
-    choosePlan: 'Choose Your Plan',
-    oneTime: 'One-time',
-    monthly: 'Monthly',
-    popular: 'Most Popular',
-    parse: 'parse',
-    parses: 'parses',
-    unlimited: 'Unlimited',
-    buyNow: 'Buy Now',
-    subscribe: 'Subscribe',
-    currentPlan: 'Current Plan',
-    parsesLeft: 'parses remaining',
-    basicParsing: 'Basic PDF parsing',
-    smartInsights: 'Smart spending insights',
-    categoryAnalysis: 'Category analysis',
-    exportOptions: 'Export options',
-    prioritySupport: 'Priority support',
-    totalSpent: 'Total Spent',
-    totalIncome: 'Total Income',
-    netAmount: 'Net Amount',
-    transactions: 'Transactions',
-    exportCsv: 'Export CSV',
-    quickbooks: 'QuickBooks',
-    needUpgrade: 'Upgrade to continue parsing',
-    paymentSuccess: 'Payment successful! 🎉',
-    paymentError: 'Payment failed. Please try again.',
-    salary: 'Salary & Wages',
-    transferIn: 'Transfer In',
-    otherIncome: 'Other Income',
-    fastFood: 'Fast Food',
-    restaurants: 'Restaurants',
-    coffee: 'Coffee & Cafes',
-    foodDelivery: 'Food Delivery',
-    gas: 'Gas & Fuel',
-    autoPayment: 'Auto Payment',
-    rideshare: 'Rideshare',
-    movies: 'Movies & Theater',
-    subscriptions: 'Subscriptions',
-    onlineShopping: 'Online Shopping',
-    generalShopping: 'General Shopping',
-    clothing: 'Clothing & Fashion',
-    technology: 'Technology',
-    personalTransfers: 'Personal Transfers',
-    generalExpenses: 'General Expenses'
-  },
-  es: {
-    signIn: 'Iniciar sesión con Google',
-    signOut: 'Cerrar Sesión',
-    upgrade: 'Mejorar Plan',
-    language: 'Idioma',
-    title: 'Transforma tus Estados de Cuenta en Datos Útiles',
-    subtitle: 'Sube PDFs. Extrae transacciones. Categoriza con IA. Obtén Insights Inteligentes.',
-    uploadTitle: 'Subir Estado de Cuenta (PDF)',
-    selectFile: 'Seleccionar Archivo PDF',
-    uploadAnother: 'Subir Otro PDF',
-    choosePlan: 'Elige tu Plan',
-    oneTime: 'Una vez',
-    monthly: 'Mensual',
-    popular: 'Más Popular',
-    parse: 'análisis',
-    parses: 'análisis',
-    unlimited: 'Ilimitado',
-    buyNow: 'Comprar Ahora',
-    subscribe: 'Suscribirse',
-    currentPlan: 'Plan Actual',
-    parsesLeft: 'análisis restantes',
-    basicParsing: 'Análisis básico de PDF',
-    smartInsights: 'Insights inteligentes de gastos',
-    categoryAnalysis: 'Análisis de categorías',
-    exportOptions: 'Opciones de exportación',
-    prioritySupport: 'Soporte prioritario',
-    totalSpent: 'Total Gastado',
-    totalIncome: 'Ingresos Totales',
-    netAmount: 'Cantidad Neta',
-    transactions: 'Transacciones',
-    exportCsv: 'Exportar CSV',
-    quickbooks: 'QuickBooks',
-    needUpgrade: 'Mejora tu plan para continuar',
-    paymentSuccess: '¡Pago exitoso! 🎉',
-    paymentError: 'Pago falló. Inténtalo de nuevo.',
-    salary: 'Salario y Sueldos',
-    transferIn: 'Transferencia Entrante',
-    otherIncome: 'Otros Ingresos',
-    fastFood: 'Comida Rápida',
-    restaurants: 'Restaurantes',
-    coffee: 'Café y Cafeterías',
-    foodDelivery: 'Entrega de Comida',
-    gas: 'Gasolina y Combustible',
-    autoPayment: 'Pago de Auto',
-    rideshare: 'Viajes Compartidos',
-    movies: 'Películas y Teatro',
-    subscriptions: 'Suscripciones',
-    onlineShopping: 'Compras en Línea',
-    generalShopping: 'Compras Generales',
-    clothing: 'Ropa y Moda',
-    technology: 'Tecnología',
-    personalTransfers: 'Transferencias Personales',
-    generalExpenses: 'Gastos Generales'
-  }
-};
-
-const initializeStripe = () => {
-  return {
-    redirectToCheckout: async (sessionId: string) => {
-      console.log('Redirecting to Stripe checkout:', sessionId);
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('stripe-success', { 
-          detail: { sessionId, planId: sessionId.split('-')[1] } 
-        }));
-      }, 2000);
-    }
-  };
-};
-
-const createCheckoutSession = async (planId: string, userId: string) => {
-  const plan = pricingPlans.find(p => p.id === planId);
-  console.log('Creating checkout session for:', plan);
-  
-  return {
-    sessionId: `session-${planId}-${userId}-${Date.now()}`
-  };
-};
-
-// Hook for screen size
-const useScreenSize = () => {
-  const [screenSize, setScreenSize] = useState({
-    width: typeof window !== 'undefined' ? window.innerWidth : 1200,
-    height: typeof window !== 'undefined' ? window.innerHeight : 800
-  });
-
-  useEffect(() => {
-    const handleResize = () => {
-      setScreenSize({
-        width: window.innerWidth,
-        height: window.innerHeight
-      });
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  return screenSize;
-};
-
-const GoogleSignIn: React.FC<{ onSignIn: (user: User) => void; language: Language }> = ({ onSignIn, language }) => {
-  const t = translations[language];
-  const { width } = useScreenSize();
-  const isMobile = width <= 768;
-  
-  const handleGoogleSignIn = () => {
-    const mockUser: User = {
-      id: '123',
-      email: 'user@example.com',
-      name: 'John Doe',
-      profilePicture: 'https://via.placeholder.com/40',
-      plan: 'free',
-      parsesUsed: 0,
-      parsesRemaining: 0
-    };
-    onSignIn(mockUser);
-  };
-
-  return (
-    <button
-      onClick={handleGoogleSignIn}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.5rem',
-        padding: isMobile ? '0.625rem 1rem' : '0.75rem 1.25rem',
-        backgroundColor: 'white',
-        border: '2px solid #e5e7eb',
-        borderRadius: '12px',
-        cursor: 'pointer',
-        fontSize: isMobile ? '0.8125rem' : '0.875rem',
-        fontWeight: '600',
-        color: '#374151',
-        transition: 'all 0.2s',
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-      }}
-    >
-      <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google" style={{ width: '18px', height: '18px' }} />
-      <span style={{ display: isMobile && width <= 480 ? 'none' : 'inline' }}>{t.signIn}</span>
-      {isMobile && width <= 480 && <span>Sign in</span>}
-    </button>
-  );
-};
-
-const UserProfile: React.FC<{ user: User; onSignOut: () => void; onUpgrade: () => void; language: Language }> = ({ user, onSignOut, onUpgrade, language }) => {
-  const t = translations[language];
-  const { width } = useScreenSize();
-  const isMobile = width <= 768;
-  
-  const getPlanDisplay = () => {
-    const plan = pricingPlans.find(p => p.id === user.plan);
-    if (!plan) return user.plan;
-    return language === 'es' ? plan.nameEs : plan.name;
-  };
-
-  return (
-    <div style={{ 
-      display: 'flex', 
-      alignItems: 'center', 
-      gap: isMobile ? '0.5rem' : '1rem'
-    }}>
-      {!isMobile && (
-        <div style={{ textAlign: 'right', fontSize: '0.875rem' }}>
-          <div style={{ fontWeight: '600', color: '#374151' }}>{getPlanDisplay()}</div>
-          {user.plan !== 'unlimited' && (
-            <div style={{ color: '#6b7280', fontSize: '0.75rem' }}>
-              {user.parsesRemaining} {t.parsesLeft}
-            </div>
-          )}
-        </div>
-      )}
-
-      {user.plan !== 'unlimited' && (
-        <button
-          onClick={onUpgrade}
-          style={{
-            padding: isMobile ? '0.5rem 1rem' : '0.75rem 1.5rem',
-            background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '12px',
-            fontSize: isMobile ? '0.75rem' : '0.875rem',
-            fontWeight: '600',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)',
-            textTransform: 'none',
-            letterSpacing: '0.025em'
-          }}
-        >
-          {isMobile ? 'Upgrade' : t.upgrade}
-        </button>
-      )}
-      
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-        <img
-          src={user.profilePicture || 'https://via.placeholder.com/40'}
-          alt={user.name}
-          style={{ 
-            width: isMobile ? '32px' : '40px', 
-            height: isMobile ? '32px' : '40px', 
-            borderRadius: '50%', 
-            border: '2px solid #e5e7eb' 
-          }}
-        />
-        {!isMobile && (
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '0.875rem', fontWeight: '600', color: '#111827' }}>{user.name}</span>
-            <button
-              onClick={onSignOut}
-              style={{
-                fontSize: '0.75rem',
-                color: '#6b7280',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                textAlign: 'left'
-              }}
-            >
-              {t.signOut}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const PricingModal: React.FC<{ 
-  user: User | null; 
-  onClose: () => void; 
-  onSelectPlan: (planId: string) => void; 
-  language: Language 
-}> = ({ user, onClose, onSelectPlan, language }) => {
-  const t = translations[language];
-  const { width } = useScreenSize();
-  const isMobile = width <= 768;
-
-  return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.75)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-      padding: isMobile ? '1rem' : '2rem'
-    }}>
-      <div style={{
-        backgroundColor: 'white',
-        borderRadius: isMobile ? '16px' : '24px',
-        maxWidth: isMobile ? '100%' : '1000px',
-        width: '100%',
-        maxHeight: '90vh',
-        overflow: 'auto',
-        position: 'relative',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-      }}>
-        <button
-          onClick={onClose}
-          style={{
-            position: 'absolute',
-            top: '1rem',
-            right: '1rem',
-            width: '36px',
-            height: '36px',
-            borderRadius: '50%',
-            backgroundColor: '#f3f4f6',
-            border: 'none',
-            fontSize: '1.125rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10
-          }}
-        >
-          ✕
-        </button>
-
-        <div style={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          padding: isMobile ? '2rem 1rem 1.5rem' : '3rem 2rem 2rem',
-          borderRadius: isMobile ? '16px 16px 0 0' : '24px 24px 0 0',
-          textAlign: 'center',
-          color: 'white'
-        }}>
-          <h2 style={{ 
-            fontSize: isMobile ? '1.875rem' : '2.5rem', 
-            fontWeight: 'bold', 
-            marginBottom: '0.5rem' 
-          }}>
-            {t.choosePlan}
-          </h2>
-          <p style={{ 
-            fontSize: isMobile ? '1rem' : '1.125rem', 
-            opacity: 0.9 
-          }}>
-            {language === 'es' 
-              ? 'Elige el plan perfecto para tus necesidades'
-              : 'Choose the perfect plan for your needs'
-            }
-          </p>
-        </div>
-
-        <div style={{ padding: isMobile ? '2rem 1rem' : '3rem 2rem' }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(300px, 1fr))',
-            gap: isMobile ? '1.5rem' : '2rem',
-            maxWidth: '900px',
-            margin: '0 auto'
-          }}>
-            {pricingPlans.map((plan) => (
-              <div
-                key={plan.id}
-                style={{
-                  border: plan.popular ? '3px solid #3b82f6' : '2px solid #e5e7eb',
-                  borderRadius: '20px',
-                  padding: isMobile ? '1.5rem' : '2rem',
-                  textAlign: 'center',
-                  position: 'relative',
-                  backgroundColor: 'white',
-                  transition: 'all 0.3s',
-                  transform: plan.popular && !isMobile ? 'scale(1.05)' : 'scale(1)',
-                  boxShadow: plan.popular 
-                    ? '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-                    : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-                }}
-              >
-                {plan.popular && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '-12px',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    backgroundColor: '#3b82f6',
-                    color: 'white',
-                    padding: '0.5rem 1.5rem',
-                    borderRadius: '20px',
-                    fontSize: isMobile ? '0.75rem' : '0.875rem',
-                    fontWeight: '600'
-                  }}>
-                    {t.popular}
-                  </div>
-                )}
-
-                <h3 style={{
-                  fontSize: isMobile ? '1.25rem' : '1.5rem',
-                  fontWeight: 'bold',
-                  color: '#111827',
-                  marginBottom: '1rem'
-                }}>
-                  {language === 'es' ? plan.nameEs : plan.name}
-                </h3>
-
-                <div style={{ marginBottom: '2rem' }}>
-                  <span style={{
-                    fontSize: isMobile ? '2.5rem' : '3rem',
-                    fontWeight: 'bold',
-                    color: '#111827'
-                  }}>
-                    ${plan.price}
-                  </span>
-                  <span style={{
-                    fontSize: isMobile ? '0.875rem' : '1rem',
-                    color: '#6b7280',
-                    marginLeft: '0.5rem'
-                  }}>
-                    {plan.type === 'monthly' ? `/${t.monthly.toLowerCase()}` : t.oneTime.toLowerCase()}
-                  </span>
-                </div>
-
-                <div style={{
-                  textAlign: 'left',
-                  marginBottom: '2rem',
-                  fontSize: isMobile ? '0.8125rem' : '0.875rem',
-                  color: '#374151'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                    <span style={{ color: '#10b981', fontSize: '1rem' }}>✓</span>
-                    <span>
-                      {plan.parses === 'unlimited' 
-                        ? t.unlimited 
-                        : `${plan.parses} ${plan.parses === 1 ? t.parse : t.parses}`
-                      } {language === 'es' ? 'por mes' : 'per month'}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                    <span style={{ color: '#10b981', fontSize: '1rem' }}>✓</span>
-                    <span>{t.basicParsing}</span>
-                  </div>
-                  {plan.insights && (
-                    <>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                        <span style={{ color: '#10b981', fontSize: '1rem' }}>✓</span>
-                        <span>{t.smartInsights}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                        <span style={{ color: '#10b981', fontSize: '1rem' }}>✓</span>
-                        <span>{t.categoryAnalysis}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                        <span style={{ color: '#10b981', fontSize: '1rem' }}>✓</span>
-                        <span>{t.exportOptions}</span>
-                      </div>
-                    </>
-                  )}
-                  {plan.id === 'unlimited' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                      <span style={{ color: '#10b981', fontSize: '1rem' }}>✓</span>
-                      <span>{t.prioritySupport}</span>
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => onSelectPlan(plan.id)}
-                  disabled={user?.plan === plan.id}
-                  style={{
-                    width: '100%',
-                    padding: isMobile ? '0.875rem 1.5rem' : '1rem 2rem',
-                    backgroundColor: user?.plan === plan.id 
-                      ? '#6b7280' 
-                      : plan.popular 
-                        ? '#3b82f6' 
-                        : '#111827',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '12px',
-                    fontSize: isMobile ? '0.875rem' : '1rem',
-                    fontWeight: '600',
-                    cursor: user?.plan === plan.id ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  {user?.plan === plan.id 
-                    ? t.currentPlan
-                    : plan.type === 'monthly' 
-                      ? t.subscribe 
-                      : t.buyNow
-                  }
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const LanguageToggle: React.FC<{ language: Language; onLanguageChange: (lang: Language) => void }> = ({ language, onLanguageChange }) => {
-  const { width } = useScreenSize();
-  const isMobile = width <= 768;
-  
-  return (
-    <div style={{ 
-      display: 'flex', 
-      alignItems: 'center', 
-      gap: isMobile ? '0.5rem' : '0.75rem',
-      background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-      padding: isMobile ? '0.5rem 0.75rem' : '0.75rem 1rem',
-      borderRadius: '12px',
-      border: '2px solid #e2e8f0',
-      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
-      transition: 'all 0.2s ease'
-    }}>
-      <span style={{ 
-        fontSize: isMobile ? '1rem' : '1.25rem',
-        filter: 'grayscale(0)',
-        opacity: 0.8
-      }}>🌐</span>
-      <select
-        value={language}
-        onChange={(e) => onLanguageChange(e.target.value as Language)}
-        style={{
-          padding: isMobile ? '0.375rem 0.5rem' : '0.5rem 0.75rem',
-          border: 'none',
-          borderRadius: '8px',
-          fontSize: isMobile ? '0.8125rem' : '0.875rem',
-          backgroundColor: 'white',
-          fontWeight: '600',
-          cursor: 'pointer',
-          color: '#1e293b',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-          outline: 'none',
-          minWidth: isMobile ? '80px' : '100px',
-          appearance: 'none',
-          backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
-          backgroundPosition: 'right 0.5rem center',
-          backgroundRepeat: 'no-repeat',
-          backgroundSize: '1.5em 1.5em',
-          paddingRight: '2.5rem'
-        }}
-      >
-        <option value="en">English</option>
-        <option value="es">Español</option>
-      </select>
-    </div>
-  );
-};
-
-const Toast: React.FC<{ message: string; type: 'success' | 'error' | 'info'; onClose: () => void }> = ({ message, type, onClose }) => {
-  const { width } = useScreenSize();
-  const isMobile = width <= 768;
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose();
-    }, 4000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  const colors = {
-    success: { bg: '#10b981', border: '#059669', icon: '🎉' },
-    error: { bg: '#ef4444', border: '#dc2626', icon: '❌' },
-    info: { bg: '#3b82f6', border: '#2563eb', icon: 'ℹ️' }
-  };
-
-  const config = colors[type];
-
-  return (
-    <div style={{
-      position: 'fixed',
-      top: '20px',
-      right: isMobile ? '10px' : '20px',
-      left: isMobile ? '10px' : 'auto',
-      backgroundColor: config.bg,
-      color: 'white',
-      padding: isMobile ? '0.875rem 1rem' : '1rem 1.25rem',
-      borderRadius: '12px',
-      border: `2px solid ${config.border}`,
-      zIndex: 1001,
-      maxWidth: isMobile ? 'calc(100vw - 20px)' : '400px',
-      fontSize: isMobile ? '0.8125rem' : '0.875rem',
-      fontWeight: '500',
-      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '0.75rem'
-    }}>
-      <span style={{ fontSize: '1.25rem' }}>{config.icon}</span>
-      <span>{message}</span>
-    </div>
-  );
-};
-
-export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [language, setLanguage] = useState<Language>('en');
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [fileName, setFileName] = useState('');
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  const [showPricingModal, setShowPricingModal] = useState(false);
-
-  const { width } = useScreenSize();
-  const isMobile = width <= 768;
-  const isTablet = width <= 1024 && width > 768;
-
-  const t = translations[language];
-
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    setToast({ message, type });
-  };
-
-  const handleSignIn = (signedInUser: User) => {
-    setUser(signedInUser);
-    showToast(`Welcome, ${signedInUser.name}!`, 'success');
-  };
-
-  const handleSignOut = () => {
-    setUser(null);
-    setTransactions([]);
-    showToast('Signed out successfully', 'info');
-  };
-
-  const handleSelectPlan = async (planId: string) => {
-    if (!user) return;
-
-    try {
-      showToast('Redirecting to payment...', 'info');
-      
-      const { sessionId } = await createCheckoutSession(planId, user.id);
-      const stripe = initializeStripe();
-      await stripe.redirectToCheckout(sessionId);
-      
-    } catch (error) {
-      showToast(t.paymentError, 'error');
-    }
-  };
-
-  useEffect(() => {
-    const handleStripeSuccess = (event: CustomEvent) => {
-      const { planId } = event.detail;
-      const plan = pricingPlans.find(p => p.id === planId);
-      
-      if (user && plan) {
-        const updatedUser: User = {
-          ...user,
-          plan: planId as any,
-          parsesRemaining: plan.parses === 'unlimite
